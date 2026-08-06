@@ -39,7 +39,10 @@ Remote publish: [roblox/REMOTE-TEST.md](roblox/REMOTE-TEST.md).
 
 ## Google Play path
 
-See [docs/PLAY-STORE.md](docs/PLAY-STORE.md). Capacitor shell: `com.fullvaluedan.piration` (see android package config).
+See [docs/PLAY-STORE.md](docs/PLAY-STORE.md) and the ready-to-paste submission
+kit in [docs/PLAY-STORE-SUBMISSION.md](docs/PLAY-STORE-SUBMISSION.md)
+(icon, feature graphic, real screenshots, privacy policy URL, listing copy).
+Capacitor shell: `com.fullvaluedan.piration` (see android package config).
 
 ## Repo layout
 

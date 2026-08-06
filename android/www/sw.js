@@ -1,4 +1,4 @@
-const CACHE = "piration-offline-v3";
+const CACHE = "piration-offline-v4";
 const ASSETS = [
   "./",
   "./index.html",

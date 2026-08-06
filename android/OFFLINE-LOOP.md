@@ -63,4 +63,4 @@ Endless mode -> waves + high score -> deeper unlocks
 cd android && npm run serve   ->   http://localhost:5173
 ```
 Or open `android/www/index.html` in a browser. Hard refresh if an old service
-worker sticks (`sw.js` is v3).
+worker sticks (`sw.js` is v4).

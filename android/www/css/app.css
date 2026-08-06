@@ -179,6 +179,16 @@ button.btn.mini {
   font-size: 1rem;
 }
 
+.brand-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.brand-actions .help-btn {
+  margin-left: 0;
+}
+
 .hand {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
@@ -340,6 +350,86 @@ button.btn.mini {
   font-size: 0.88rem;
   line-height: 1.4;
 }
+
+/* UX polish */
+
+.warn { color: #ff9d6b; font-weight: 700; }
+
+.badge {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.68rem;
+  color: #1a1205;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 6px;
+  vertical-align: middle;
+}
+
+.intent.attack { background: #3a1420; border-color: #8a3346; color: #ff9bb0; }
+.intent.brace { background: #16263f; border-color: #33588a; color: #9bc8ff; }
+.intent.charge { background: #33290f; border-color: #8a6d1f; color: #ffe39b; }
+
+.deckinfo { margin-top: 4px; font-size: 0.72rem; }
+
+.combat-actions .btn { flex: 1; }
+
+.hint {
+  background: linear-gradient(90deg, #1d3352, #172a44);
+  border: 1px solid #3a557c;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 0.82rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hint .btn { margin-left: auto; }
+
+.hpbar > i {
+  transition: width 0.35s ease;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 8, 16, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 60;
+  padding: 20px;
+}
+
+.modal.hidden { display: none; }
+
+.modal-box {
+  background: var(--panel2);
+  border: 1px solid #3a557c;
+  border-radius: 16px;
+  padding: 18px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+.modal-box h3 {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 1.05rem;
+}
+
+.modal-actions { justify-content: flex-end; margin: 14px 0 0; }
+
+.modal-actions .btn { min-width: 96px; }
+
+.rarity.common { color: #9bc8ff; border-color: #33588a; }
+.rarity.rare { color: #7aa7ff; border-color: #3c7dd6; }
+.rarity.epic { color: #c79bff; border-color: #a05ad6; }
+.rarity.legendary { color: #ffe39b; border-color: #e6aa3c; }
 
 @media (max-width: 420px) {
   .tabs button {

@@ -7,6 +7,8 @@ let state = null;
 let tab = "voyage";
 let toastTimer = null;
 let uiPending = null; // transient result screens (not persisted)
+let audioCtx = null;
+let modalActive = false;
 
 const $ = (sel) => document.querySelector(sel);
 const content = () => $("#content");
@@ -17,6 +19,98 @@ function toast(msg) {
   el.classList.remove("hidden");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.add("hidden"), 2600);
+}
+
+// ---------- feedback: sound + vibration ----------
+
+function note(freq, start, dur, type = "sine", vol = 0.12) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, audioCtx.currentTime + start);
+  gain.gain.exponentialRampToValueAtTime(vol, audioCtx.currentTime + start + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + start + dur);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(audioCtx.currentTime + start);
+  osc.stop(audioCtx.currentTime + start + dur + 0.05);
+}
+
+function sfx(kind) {
+  if (!state?.soundOn) return;
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    const map = {
+      tap: () => note(520, 0, 0.06, "triangle", 0.07),
+      card: () => note(660, 0, 0.07, "triangle", 0.09),
+      hit: () => note(180, 0, 0.12, "sawtooth", 0.08),
+      shield: () => note(420, 0, 0.1, "sine", 0.08),
+      coin: () => {
+        note(880, 0, 0.08, "square", 0.05);
+        note(1175, 0.08, 0.12, "square", 0.05);
+      },
+      win: () => {
+        [523, 659, 784].forEach((f, i) => note(f, i * 0.12, 0.18, "triangle", 0.1));
+      },
+      lose: () => {
+        [330, 262, 196].forEach((f, i) => note(f, i * 0.16, 0.22, "sawtooth", 0.08));
+      },
+      level: () => {
+        [523, 659, 784, 1046].forEach((f, i) => note(f, i * 0.1, 0.16, "triangle", 0.11));
+      },
+      unlock: () => {
+        [392, 523, 659, 784].forEach((f, i) => note(f, i * 0.11, 0.2, "square", 0.07));
+      },
+      error: () => note(140, 0, 0.16, "sawtooth", 0.08),
+    };
+    (map[kind] || map.tap)();
+  } catch (_) {}
+}
+
+function buzz(pattern) {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch (_) {}
+}
+
+// ---------- modal ----------
+
+function openModal({ title, body, actions }) {
+  modalActive = true;
+  const overlay = $("#modal");
+  overlay.classList.remove("hidden");
+  $("#modalTitle").textContent = title;
+  $("#modalBody").innerHTML = body;
+  const actionsEl = $("#modalActions");
+  actionsEl.innerHTML = "";
+  for (const a of actions) {
+    const btn = document.createElement("button");
+    btn.className = "btn " + (a.style || "");
+    btn.textContent = a.label;
+    btn.addEventListener("click", () => {
+      closeModal();
+      a.fn?.();
+    });
+    actionsEl.appendChild(btn);
+  }
+}
+
+function closeModal() {
+  modalActive = false;
+  $("#modal").classList.add("hidden");
+}
+
+function confirmModal({ title, body, confirmLabel, danger, onConfirm }) {
+  openModal({
+    title,
+    body,
+    actions: [
+      { label: "Cancel", style: "ghost", fn: () => {} },
+      { label: confirmLabel, style: danger ? "danger" : "", fn: onConfirm },
+    ],
+  });
 }
 
 function save() {
@@ -71,6 +165,20 @@ function bind(sel, fn) {
   el?.addEventListener("click", fn);
 }
 
+function maybeHint(key, msg) {
+  if (state.hints?.[key]) return "";
+  state.hints[key] = true;
+  save();
+  return `<div class="hint">💡 ${esc(msg)} <button class="btn mini ghost" id="hintClose">Got it</button></div>`;
+}
+
+function bindHintClose() {
+  bind("#hintClose", () => {
+    sfx("tap");
+    render();
+  });
+}
+
 // ---------- header ----------
 
 function refreshStats() {
@@ -78,6 +186,10 @@ function refreshStats() {
   const ship = core.shipStatus(state, CARDS.game);
   const uniq = new Set(state.collection || []).size;
   const inv = state.inventory;
+  const warn =
+    ship.pct < 60
+      ? `<div class="warn">⚓ Hull at ${ship.pct}% — repair at the Shipyard</div>`
+      : "";
   $("#stats").innerHTML = `
     <div class="statline">
       <span>${esc(cap?.icon || "☠")} ${esc(cap?.name || "-")} · Lv${state.character.level}</span>
@@ -88,13 +200,26 @@ function refreshStats() {
       <span>${esc(ship.ship.name)} ${ship.pct}%</span>
       <span>${uniq} cards</span>
     </div>`;
+  if (warn) $("#stats").insertAdjacentHTML?.("beforeend", warn);
+  const soundBtn = $("#soundBtn");
+  if (soundBtn) soundBtn.textContent = state.soundOn ? "🔊" : "🔇";
+  updateTabBadges();
+}
+
+function updateTabBadges() {
+  const atSea = state.voyage || state.combat || state.endless;
+  const badge = $("#voyageBadge");
+  if (badge) badge.style.display = atSea ? "" : "none";
+  const battle = state.combat;
+  if (battle) badge.textContent = battle.mode === "endless" ? "∞" : "⚔";
 }
 
 // ---------- voyage ----------
 
 function renderZones() {
   const lvl = state.character.level;
-  let html = `<div class="section"><h2>Set Sail</h2>
+  let html = maybeHint("voyage", "Pick a zone and sail. Each voyage is 3 random encounters — fight, bribe, or flee. No energy, ever.");
+  html += `<div class="section"><h2>Set Sail</h2>
     <p class="muted">Every voyage is a run of random encounters — monsters, elites, and caches. Monsters drop loot and cards. No energy: risk and hull repair keep you honest.</p>`;
   for (const z of CARDS.game.zones) {
     const locked = lvl < z.minLevel;
@@ -112,10 +237,13 @@ function renderZones() {
     <p class="muted">Sail → fight random monsters → loot resources and cards → return to port → craft ships, recruit crew, enhance cards → unlock captains via missions → chase the Endless high score.</p>
   </div>`;
   content().innerHTML = html;
+  bindHintClose();
   content().querySelectorAll("[data-zone]").forEach((b) =>
     b.addEventListener("click", () => {
       const r = core.startVoyage(state, CARDS.game, b.dataset.zone);
       if (!r.ok) return toast(r.reason);
+      sfx("coin");
+      buzz(15);
       toast("Set sail!");
       after();
     })
@@ -156,22 +284,26 @@ function renderEncounterIntro() {
   bind("#claimCache", () => {
     const r = core.collectCache(state, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("coin");
     toast(`Cache +${r.marks} Marks · ${fmtLoot(r.loot)} · +${r.xp} XP`);
     after();
   });
   bind("#fightBtn", () => {
     const r = core.startFight(state, CARDS, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("tap");
     after();
   });
   bind("#bribeBtn", () => {
     const r = core.bribeEncounter(state, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("coin");
     toast("Bribed your way past. +6 XP");
     after();
   });
   bind("#fleeBtn", () => {
     core.fleeEncounter(state, CARDS.game);
+    sfx("lose");
     toast("Fled! Hull took a beating.");
     after();
   });
@@ -221,18 +353,21 @@ function renderVoyageResult(result) {
   } else if (result.kind === "voyage_defeat") {
     html = `<div class="section"><h2 class="defeat">Defeated</h2>
       <p class="muted">Your ship took hull damage. Repair it at the Shipyard. (+${result.xp} XP)</p>
-      <button class="btn" id="dockBtn">Return to port</button></div>`;
+      <button class="btn" id="dockBtn">Return to port</button>
+    </div>`;
   }
-  html += `</div>`;
+  if (result.kind !== "voyage_defeat") html += `</div>`;
   content().innerHTML = html;
   bind("#continueBtn", () => {
     core.continueVoyage(state, CARDS.game);
     uiPending = null;
+    sfx("tap");
     after();
   });
   bind("#dockBtn", () => {
     core.returnToPort(state);
     uiPending = null;
+    sfx("tap");
     after();
   });
 }
@@ -249,10 +384,12 @@ function renderBossPrompt() {
   bind("#fightBoss", () => {
     const r = core.startFight(state, CARDS, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("tap");
     after();
   });
   bind("#skipBoss", () => {
     core.skipBoss(state, CARDS.game);
+    sfx("tap");
     after();
   });
 }
@@ -281,6 +418,10 @@ function enemyIntentText(combat) {
   return `Attack (~${dmg})`;
 }
 
+function enemyIntentClass(combat) {
+  return combat.enemy.intent === "brace" ? "brace" : combat.enemy.intent === "charge" ? "charge" : "attack";
+}
+
 function cardLine(id) {
   const base = CARDS.byId[id];
   if (!base) return "";
@@ -306,14 +447,19 @@ function renderCombat(back) {
   }
   const php = Math.max(0, Math.round((c.playerHp / c.playerMaxHp) * 100));
   const ehp = Math.max(0, Math.round((c.enemy.hp / c.enemy.maxHp) * 100));
+  const endlessLine = c.mode === "endless"
+    ? `<div class="muted">Wave ${c.endless?.wave || ""} · Score ${state.endless?.score || 0} · ${state.endless?.waveEnemiesLeft || 1} this wave</div>`
+    : "";
   let html = `<div class="section battle">
     <h2>${esc(c.enemy.name)}</h2>
     <div class="muted">${c.mode === "endless" ? `Wave ${c.endless?.wave || ""}` : ""} · ${esc(c.encounter.isElite ? "Elite" : c.encounter.isBoss ? "Boss" : "Monster")}</div>
     <div class="hpbar enemy"><i style="width:${ehp}%"></i></div>
-    <div class="intent">${esc(enemyIntentText(c))}</div>
+    <div class="intent ${enemyIntentClass(c)}">${esc(enemyIntentText(c))}</div>
+    ${endlessLine}
     <div class="row"><span>You: ${c.playerHp}/${c.playerMaxHp} HP · ${c.playerShield} SH</span>
       <span>AP ${c.ap}/${c.maxAp} · Turn ${c.turn}</span></div>
-    <div class="hpbar"><i style="width:${php}%"></i></div>`;
+    <div class="hpbar"><i style="width:${php}%"></i></div>
+    <div class="muted deckinfo">Deck ${c.drawPile.length} · Hand ${c.hand.length} · Discard ${c.discard.length}</div>`;
 
   if (c.over) {
     html += `<p class="${c.won ? "victory" : "defeat"}">${c.won ? "VICTORY" : "DEFEAT"}</p>
@@ -323,13 +469,17 @@ function renderCombat(back) {
     c.hand.forEach((id, i) => {
       const base = CARDS.byId[id];
       const dis = !base || c.ap < base.ap;
-      html += `<button class="card ${rarityClass(id)} ${dis ? "disabled" : ""}" data-hand="${i}" ${dis ? "disabled" : ""}>
+      const hint = !base ? "" : c.ap < base.ap ? ` title="Needs ${base.ap} AP"` : "";
+      html += `<button class="card ${rarityClass(id)} ${dis ? "disabled" : ""}" data-hand="${i}" ${dis ? "disabled" : ""}${hint}>
         <strong>${esc(base?.name || id)}</strong>
         <span class="cardline">${cardLine(id)}</span>
       </button>`;
     });
     html += `</div>
-      <div class="row"><button class="btn danger" id="endTurn">End turn</button></div>`;
+      <div class="row combat-actions">
+        <button class="btn" id="endTurn">End turn</button>
+        <button class="btn ghost" id="retreatBtn">Retreat</button>
+      </div>`;
   }
   html += `</div>
     <div class="section"><h2>Log</h2><div class="log">${esc((c.log || []).slice(-8).join("\n"))}</div></div>`;
@@ -337,15 +487,39 @@ function renderCombat(back) {
   content().querySelectorAll("[data-hand]").forEach((b) =>
     b.addEventListener("click", () => {
       const r = core.playCard(state, CARDS, CARDS.game, +b.dataset.hand);
-      if (!r.ok) toast(r.reason);
+      if (!r.ok) {
+        sfx("error");
+        toast(r.reason);
+      } else {
+        sfx("card");
+        buzz(8);
+      }
       save();
       render();
     })
   );
   bind("#endTurn", () => {
+    sfx("hit");
     core.endTurn(state, CARDS, CARDS.game);
     save();
     render();
+  });
+  bind("#retreatBtn", () => {
+    confirmModal({
+      title: "Retreat?",
+      body: `<p class="muted">Abandon this fight? Your hull takes a beating (${Math.round(CARDS.game.balance.fleeDurabilityLoss * 100)}% durability) and the voyage ends.</p>`,
+      confirmLabel: "Retreat",
+      danger: true,
+      onConfirm: () => {
+        const r = core.retreatFromCombat(state, CARDS, CARDS.game);
+        if (!r.ok) return toast(r.reason);
+        sfx("lose");
+        toast("Retreated");
+        uiPending = null;
+        save();
+        render();
+      },
+    });
   });
   bind("#collectBtn", () => {
     uiPending = core.collectCombatResult(state, CARDS, CARDS.game);
@@ -353,6 +527,17 @@ function renderCombat(back) {
       core.endlessNextEnemy(state, CARDS, CARDS.game);
       uiPending = null;
     }
+    if (uiPending?.kind === "voyage_defeat" || uiPending?.kind === "endless_end") {
+      sfx("lose");
+      buzz([80, 60, 120]);
+    } else if (uiPending?.levels) {
+      sfx("level");
+      buzz([40, 40, 80]);
+    } else {
+      sfx("win");
+      buzz([30, 30, 60]);
+    }
+    sfx("coin");
     save();
     render();
   });
@@ -362,7 +547,9 @@ function renderCombat(back) {
 
 function renderEndlessMenu() {
   const best = state.stats.endlessBestWave || 0;
-  let html = `<div class="section"><h2>Endless Mode</h2>
+  const medal = ["🥇", "🥈", "🥉"];
+  let html = maybeHint("endless", "Waves scale forever. Cash out with your loot before you sink — score is king.");
+  html += `<div class="section"><h2>Endless Mode</h2>
     <p class="muted">Waves of monsters, no port, no mercy. Enemies scale forever. Score = ${CARDS.game.balance.endlessScorePerWave}/wave + ${CARDS.game.balance.endlessScorePerKill}/kill + ${CARDS.game.balance.endlessScorePerElite}/elite. Run ends when you sink — cash out XP and loot based on depth.</p>
     <p>Best wave: <strong>${best}</strong> · Best score: <strong>${state.stats.endlessBestScore || 0}</strong></p>
     <button class="btn" id="startEndless">Enter the Abyss</button>
@@ -374,16 +561,19 @@ function renderEndlessMenu() {
     html += `<div class="log">`;
     state.leaderboard.forEach((e, i) => {
       const cap = core.captainById(CARDS.game, e.captain);
-      html += `${i + 1}. ${e.score} pts — wave ${e.wave}, ${e.kills} kills (${esc(cap?.name || e.captain)}) ${new Date(e.date).toLocaleDateString()}\n`;
+      html += `${medal[i] || (i + 1) + "."} ${e.score} pts — wave ${e.wave}, ${e.kills} kills (${esc(cap?.name || e.captain)}) ${new Date(e.date).toLocaleDateString()}\n`;
     });
     html += `</div>`;
   }
   html += `</div>
   <div class="section"><h2>Unlock missions</h2><p class="muted">Endless is also a mission path: kill ${CARDS.game.captains.find((c) => c.id === "bones").unlock.endlessKills} enemies to unlock Salty Bones, reach wave ${CARDS.game.captains.find((c) => c.id === "oz").unlock.endlessWave} for Mapmaker Oz…</p></div>`;
   content().innerHTML = html;
+  bindHintClose();
   bind("#startEndless", () => {
     const r = core.startEndless(state, CARDS, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("unlock");
+    buzz(30);
     toast("The Abyss welcomes you.");
     after();
   });
@@ -405,18 +595,28 @@ function renderWaveCleared(result) {
     const r = core.endlessNextWave(state, CARDS, CARDS.game);
     if (!r.ok) return toast(r.reason);
     uiPending = null;
+    sfx("tap");
     after();
   });
   bind("#repairBtn", () => {
     const r = core.endlessRepair(state, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("coin");
     toast("Repaired +20 HP");
     after();
   });
   bind("#retireBtn", () => {
-    uiPending = core.retireEndless(state, CARDS, CARDS.game, true);
-    save();
-    render();
+    confirmModal({
+      title: "Retire with loot?",
+      body: `<p class="muted">End the run now? You keep XP, loot, and your score (wave ${en.wave}, ${en.score} pts).</p>`,
+      confirmLabel: "Retire",
+      onConfirm: () => {
+        uiPending = core.retireEndless(state, CARDS, CARDS.game, true);
+        sfx("win");
+        save();
+        render();
+      },
+    });
   });
 }
 
@@ -429,6 +629,7 @@ function renderEndlessSummary(result) {
   content().innerHTML = html;
   bind("#backEndless", () => {
     uiPending = null;
+    sfx("tap");
     after();
   });
 }
@@ -456,7 +657,8 @@ function renderShipyard() {
   const rCost = core.repairCost(state, CARDS.game);
   const ship = core.shipById(CARDS.game, state.shipId);
 
-  let html = `<div class="section"><h2>Cargo</h2>
+  let html = maybeHint("shipyard", "Defeats and flees damage your hull. Repair here, then craft bigger ships for more AP and berths.");
+  html += `<div class="section"><h2>Cargo</h2>
     <p class="muted">${parts.length ? parts.join(" · ") : "Empty hold"}</p></div>
     <div class="section"><h2>Hull — ${esc(shipStatus.ship.name)}</h2>
     <div class="hpbar"><i style="width:${shipStatus.pct}%"></i></div>
@@ -474,20 +676,30 @@ function renderShipyard() {
     const order = CARDS.game.ships.map((x) => x.id);
     const isNext = order.indexOf(s.id) === order.indexOf(state.shipId) + 1;
     const levelOk = state.character.level >= s.level;
-    const afford = core.canPay(state.inventory, s.cost) === null;
+    const missing = core.canPay(state.inventory, s.cost);
+    const afford = missing === null;
+    const reason = !isNext
+      ? "Craft the previous hull first"
+      : !levelOk
+        ? `Requires level ${s.level}`
+        : !afford
+          ? `Missing: ${missing}`
+          : "";
     html += `<div class="row">
       <p><strong>${esc(s.name)}</strong> <span class="pill">Lv ${s.level}</span><br/>
       <span class="muted">hull ${s.hull} · AP ${s.cannons} · berths ${s.slots}</span><br/>
-      <span class="muted">${fmtCost(s.cost)}</span></p>
+      <span class="muted">${fmtCost(s.cost)}${reason ? ` · <span class="warn">${esc(reason)}</span>` : ""}</span></p>
       <button class="btn" data-ship="${s.id}" ${!isNext || !levelOk || !afford ? "disabled" : ""}>Craft</button>
     </div>`;
   }
   html += `</div>
     <div class="section"><h2>Workshop</h2>`;
   for (const r of CARDS.game.recipes) {
-    const afford = core.canPay(state.inventory, r.cost) === null;
+    const missing = core.canPay(state.inventory, r.cost);
+    const afford = missing === null;
     html += `<div class="row">
       <p><strong>${esc(r.name)}</strong> — ${esc(r.desc)}<br/><span class="muted">${fmtCost(r.cost)} → ${fmtCost(r.gives)}</span></p>
+      <span class="muted">${afford ? "" : `<span class="warn">Missing: ${missing}</span>`}</span>
       <button class="btn" data-recipe="${r.id}" ${afford ? "" : "disabled"}>Craft</button>
     </div>`;
   }
@@ -497,9 +709,11 @@ function renderShipyard() {
     <button class="btn" id="recruitBtn" ${state.crew.length >= ship.slots ? "disabled" : ""}>Recruit (${fmtCost(CARDS.game.recruitCost)})</button>
     </div>`;
   content().innerHTML = html;
+  bindHintClose();
   bind("#repairBtn", () => {
     const r = core.repairShip(state, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("coin");
     toast("Ship repaired");
     after();
   });
@@ -507,6 +721,8 @@ function renderShipyard() {
     b.addEventListener("click", () => {
       const r = core.craftShip(state, CARDS.game, b.dataset.ship);
       if (!r.ok) return toast(r.reason);
+      sfx("unlock");
+      buzz([30, 60]);
       toast("Launched the " + r.ship.name + "!");
       after();
     })
@@ -515,6 +731,7 @@ function renderShipyard() {
     b.addEventListener("click", () => {
       const r = core.craftRecipe(state, CARDS.game, b.dataset.recipe);
       if (!r.ok) return toast(r.reason);
+      sfx("coin");
       toast("Crafted " + r.r.name);
       after();
     })
@@ -522,6 +739,7 @@ function renderShipyard() {
   bind("#recruitBtn", () => {
     const r = core.recruitCrew(state, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    sfx("coin");
     toast(r.name + " joined the crew!");
     after();
   });
@@ -530,7 +748,8 @@ function renderShipyard() {
 // ---------- captains ----------
 
 function renderCaptains() {
-  let html = `<div class="section"><h2>Captain's Deck</h2>
+  let html = maybeHint("captains", "Unlock captains by completing monster and resource missions after level 10. Each has a unique deck.");
+  html += `<div class="section"><h2>Captain's Deck</h2>
     <p class="muted">Level ${state.character.level} · ${state.character.xp}/${Math.max(1, state.character.xpToNext)} XP · ${xpPct()}% to next level</p>
     <div class="hpbar"><i style="width:${xpPct()}%"></i></div>
     <p class="muted">Each captain wields a different card pool and a passive ability. Unlock them by completing monster and resource missions.</p>
@@ -561,10 +780,13 @@ function renderCaptains() {
     html += `</div>`;
   }
   content().innerHTML = html;
+  bindHintClose();
   content().querySelectorAll("[data-unlock]").forEach((b) =>
     b.addEventListener("click", () => {
       const r = core.unlockCaptain(state, CARDS, CARDS.game, b.dataset.unlock);
       if (!r.ok) return toast(r.reason);
+      sfx("unlock");
+      buzz([40, 60, 80]);
       toast("Unlocked! Starter cards granted.");
       after();
     })
@@ -573,6 +795,7 @@ function renderCaptains() {
     b.addEventListener("click", () => {
       const r = core.switchCaptain(state, CARDS.game, b.dataset.switch);
       if (!r.ok) return toast(r.reason);
+      sfx("coin");
       toast("Now commanding " + core.captainById(CARDS.game, b.dataset.switch).name);
       after();
     })
@@ -592,7 +815,8 @@ function renderCollection() {
     .sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
   const deckSize = core.combatDeck(state, CARDS, CARDS.game).length;
 
-  let html = `<div class="section"><h2>${esc(cap.icon)} ${esc(cap.name)} — crew & cards</h2>
+  let html = maybeHint("collection", "Your best 30 cards sail automatically. Spend Marks + duplicates to enhance cards.");
+  html += `<div class="section"><h2>${esc(cap.icon)} ${esc(cap.name)} — crew & cards</h2>
     <p class="muted">Level ${state.character.level} · ${owned.length} owned from ${cap.pool.length}-card pool · combat deck ${deckSize} (best 30)</p>`;
   if (state.crew.length) {
     html += `<p class="muted">Crew: ${state.crew.map((c) => esc(c.name)).join(", ")}</p>`;
@@ -600,6 +824,10 @@ function renderCollection() {
     html += `<p class="muted">No crew yet — recruit at the Shipyard.</p>`;
   }
   html += `</div>
+    <div class="section"><h2>Rarities</h2>
+      <p class="muted">Rare cards drop from level ${CARDS.game.balance.rarityLevels.rare}+, Epic from ${CARDS.game.balance.rarityLevels.epic}+, Legendary from ${CARDS.game.balance.rarityLevels.legendary}+.</p>
+      <p><span class="pill rarity common">Common</span> <span class="pill rarity rare">Rare</span> <span class="pill rarity epic">Epic</span> <span class="pill rarity legendary">Legendary</span></p>
+    </div>
     <div class="section"><h2>Enhance cards</h2>
     <p class="muted">Spend ${fmtCost(CARDS.game.balance.enhanceCost)} + one duplicate to power up a card (+1 dmg or shield, +2 heal, max +${CARDS.game.balance.enhanceMax}).</p>
     <div class="hand">`;
@@ -615,6 +843,9 @@ function renderCollection() {
     </div>`;
   }
   html += `</div></div>
+    <div class="section"><h2>About</h2>
+      <p class="muted">Piration v3 · offline-only · progress saved on device. Inspired by open-sourced Pirate Nation materials (CC0/MIT). Not affiliated with Proof of Play.</p>
+    </div>
     <div class="section"><h2>Ledger</h2>
     <p class="muted">Voyages ${state.stats.voyages} · Fights ${state.stats.fights} · W/L ${state.stats.wins}/${state.stats.losses} · Kills ${state.stats.kills} (elites ${state.stats.eliteKills}, bosses ${state.stats.bossKills})</p>
     <p class="muted">Endless runs ${state.stats.endlessRuns} · best wave ${state.stats.endlessBestWave} · best score ${state.stats.endlessBestScore}</p>
@@ -624,10 +855,12 @@ function renderCollection() {
       <button class="btn danger" id="resetBtn">Reset</button></div>
   </div>`;
   content().innerHTML = html;
+  bindHintClose();
   content().querySelectorAll("[data-enhance]").forEach((b) =>
     b.addEventListener("click", () => {
       const r = core.enhanceCard(state, CARDS, CARDS.game, b.dataset.enhance);
       if (!r.ok) return toast(r.reason);
+      sfx("card");
       toast(r.card.name + " enhanced to +" + r.level);
       after();
     })
@@ -636,24 +869,47 @@ function renderCollection() {
     const txt = core.serialize(state);
     try {
       navigator.clipboard?.writeText(txt);
+      sfx("coin");
       toast("Save copied to clipboard");
     } catch {
       prompt("Copy your save:", txt);
     }
   });
   bind("#importBtn", () => {
-    const raw = prompt("Paste a Piration save:");
-    if (!raw) return;
-    const s = core.deserialize(raw, CARDS, CARDS.game);
-    state = s;
-    toast("Save imported");
-    after();
+    openModal({
+      title: "Import save",
+      body: `<p class="muted">Paste a Piration save below. This replaces your current progress.</p>
+        <textarea id="importText" rows="4" placeholder="Paste save here…" style="width:100%;background:#0f1c30;color:var(--text);border:1px solid #3a557c;border-radius:8px;padding:8px;font-family:monospace;font-size:0.75rem;"></textarea>`,
+      actions: [
+        { label: "Cancel", style: "ghost", fn: () => {} },
+        {
+          label: "Import",
+          fn: () => {
+            const raw = $("#importText")?.value;
+            if (!raw) return toast("Nothing to import");
+            const s = core.deserialize(raw, CARDS, CARDS.game);
+            state = s;
+            sfx("coin");
+            toast("Save imported");
+            after();
+          },
+        },
+      ],
+    });
   });
   bind("#resetBtn", () => {
-    if (!confirm("Wipe local save and start over?")) return;
-    state = core.newGame(CARDS, CARDS.game);
-    toast("Fresh captain on the dock");
-    after();
+    confirmModal({
+      title: "Reset save?",
+      body: `<p class="muted">This wipes all progress on this device and starts a fresh captain. This cannot be undone.</p>`,
+      confirmLabel: "Reset",
+      danger: true,
+      onConfirm: () => {
+        state = core.newGame(CARDS, CARDS.game);
+        sfx("lose");
+        toast("Fresh captain on the dock");
+        after();
+      },
+    });
   });
 }
 
@@ -673,6 +929,7 @@ function renderHelp() {
   content().innerHTML = html;
   bind("#helpOk", () => {
     state.sawHelp = true;
+    sfx("tap");
     save();
     render();
   });
@@ -695,12 +952,60 @@ function bindTabs() {
     const btn = e.target.closest("button[data-tab]");
     if (!btn) return;
     tab = btn.dataset.tab;
+    sfx("tap");
     $("#tabs").querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
     render();
   });
   bind("#helpBtn", () => {
     state.sawHelp = false;
     render();
+  });
+  bind("#soundBtn", () => {
+    state.soundOn = !state.soundOn;
+    save();
+    refreshStats();
+    if (state.soundOn) sfx("coin");
+  });
+  bind("#modal", (e) => {
+    if (e.target?.id === "modal") closeModal();
+  });
+}
+
+function setupBackButton() {
+  const App = window.Capacitor?.Plugins?.App;
+  if (!App?.addListener) return;
+  App.addListener("backButton", () => {
+    if (modalActive) return closeModal();
+    if (state.combat) {
+      confirmModal({
+        title: "Retreat?",
+        body: `<p class="muted">Leave this battle? The voyage ends and your hull takes damage.</p>`,
+        confirmLabel: "Retreat",
+        danger: true,
+        onConfirm: () => {
+          core.retreatFromCombat(state, CARDS, CARDS.game);
+          uiPending = null;
+          save();
+          render();
+        },
+      });
+    } else if (tab !== "voyage") {
+      tab = "voyage";
+      render();
+    } else if (state.voyage) {
+      confirmModal({
+        title: "Return to port?",
+        body: `<p class="muted">Abandon the current voyage and sail home?</p>`,
+        confirmLabel: "Return",
+        onConfirm: () => {
+          core.returnToPort(state);
+          save();
+          render();
+        },
+      });
+    } else {
+      App.exitApp?.();
+    }
   });
 }
 
@@ -715,7 +1020,10 @@ async function boot() {
   CARDS.byId = Object.fromEntries(cardsData.cards.map((c) => [c.id, c]));
   CARDS.game = game;
   state = core.deserialize(localStorage.getItem(STORAGE_KEY), CARDS, game);
+  if (typeof state.soundOn !== "boolean") state.soundOn = true;
+  if (!state.hints) state.hints = {};
   bindTabs();
+  setupBackButton();
   render();
   setInterval(() => {
     // keep header current without stealing focus from combat

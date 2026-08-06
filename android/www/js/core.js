@@ -142,6 +142,8 @@ export function newGame(cards, game) {
     combat: null,
     endless: null,
     sawHelp: false,
+    soundOn: true,
+    hints: {},
   };
   return state;
 }
@@ -174,6 +176,8 @@ export function deserialize(json, cards, game) {
     if (!s.shipDura) s.shipDura = shipById(game, s.shipId).hull;
     s.crew = Array.isArray(s.crew) ? s.crew : [];
     s.leaderboard = Array.isArray(s.leaderboard) ? s.leaderboard : [];
+    if (typeof s.soundOn !== "boolean") s.soundOn = true;
+    if (!s.hints) s.hints = {};
     return s;
   } catch {
     return newGame(cards, game);
@@ -540,6 +544,23 @@ export function fleeEncounter(state, game) {
     v.finished = true;
   } else {
     v.index += 1;
+  }
+  return { ok: true };
+}
+
+export function retreatFromCombat(state, cards, game) {
+  const c = state.combat;
+  if (!c) return { ok: false, reason: "Not in combat" };
+  damageShip(state, game, game.balance.fleeDurabilityLoss);
+  if (c.mode === "voyage" && state.voyage) {
+    state.voyage.results.push({ type: "flee", name: c.enemy.name });
+    state.voyage.finished = true;
+  }
+  const wasEndless = c.mode === "endless";
+  state.combat = null;
+  if (wasEndless && state.endless) {
+    const end = retireEndless(state, cards, game, true);
+    return { ok: true, retired: true, ...end };
   }
   return { ok: true };
 }

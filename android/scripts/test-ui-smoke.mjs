@@ -71,6 +71,11 @@ function fakeButtons(sel) {
 globalThis.document = {
   querySelector: (sel) => el(sel.replace(/^#/, "")),
   querySelectorAll: () => [],
+  createElement: (tag) => {
+    const b = makeEl("dyn_" + tag + "_" + Math.random().toString(36).slice(2, 8));
+    b.tagName = String(tag).toUpperCase();
+    return b;
+  },
 };
 el("content").querySelectorAll = (sel) => fakeButtons(sel);
 globalThis.window = globalThis;
