@@ -15,10 +15,17 @@ npm run serve
 
 Or open `android/www/index.html` in a browser.
 
-**Test mode:** unlimited energy (`android/www/js/app.js` → `CONFIG.dev.unlimitedEnergy = true`).
-
 ### Offline loop
-Quests → XP + resources + card chance → craft ships → gauntlet (XP + card drops) → crew/deck grow. Full write-up: [android/OFFLINE-LOOP.md](android/OFFLINE-LOOP.md).
+Random monster encounters (no energy) → XP + loot + card drops → craft ships /
+enhance cards / recruit crew at port → level up → unlock captains via monster
+and resource missions → Endless high-score mode. Full write-up:
+[android/OFFLINE-LOOP.md](android/OFFLINE-LOOP.md), design:
+[docs/GAME-DESIGN.md](docs/GAME-DESIGN.md).
+
+### Balance
+`android/scripts/sim-progression.mjs` plays the real game logic with a scripted
+bot and verifies the ~20-hour max-out curve, ship/captain unlocks, and Endless
+depth. `android/scripts/test-endless-depth.mjs` checks max-gear Endless waves.
 
 ## Roblox
 

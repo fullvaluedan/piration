@@ -1,8 +1,9 @@
 {
   "name": "piration",
   "version": "1.0.0",
-  "description": "Piration — offline Pirate Nation archive port for Android",
+  "description": "Piration — offline pirate RPG for Android (random encounters, loot, captains, endless mode)",
   "private": true,
+  "type": "module",
   "scripts": {
     "serve": "npx --yes serve www -p 5173",
     "cap:add": "npx cap add android",

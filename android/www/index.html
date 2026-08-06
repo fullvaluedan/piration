@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="Pirate Nation Archive Port — offline pirate RPG. Quests, card gauntlet, ships, crew." />
+  <meta name="description" content="Piration — offline pirate RPG. Random monster encounters, loot, captains, ships, endless high-score mode. No energy, no servers." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -21,27 +21,29 @@
         <span class="skull">☠</span>
         <div>
           <h1>Piration</h1>
-          <p class="sub">Pirate archive · Offline</p>
+          <p class="sub">Offline pirate RPG · no energy · no servers</p>
         </div>
+        <button class="help-btn" id="helpBtn" title="How to play">?</button>
       </div>
       <div id="stats" class="stats">Loading…</div>
     </header>
 
     <nav class="tabs" id="tabs">
-      <button data-tab="quests" class="active">Quests</button>
-      <button data-tab="gauntlet">Gauntlet</button>
-      <button data-tab="craft">Craft</button>
-      <button data-tab="crew">Crew</button>
+      <button data-tab="voyage" class="active">Voyage</button>
+      <button data-tab="endless">Endless</button>
+      <button data-tab="shipyard">Shipyard</button>
+      <button data-tab="captains">Captains</button>
+      <button data-tab="collection">Collection</button>
     </nav>
 
     <main id="content" class="content"></main>
 
     <div id="toast" class="toast hidden"></div>
     <footer class="foot">
-      Offline · Piration · saves on device · CC0/MIT-inspired archive port
+      Offline · saves on device · inspired by Pirate Nation OSS (CC0/MIT)
     </footer>
   </div>
-  <script src="js/app.js" type="module"></script>
+  <script src="js/ui.js" type="module"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

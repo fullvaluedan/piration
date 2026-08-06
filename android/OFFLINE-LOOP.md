@@ -1,60 +1,66 @@
-# Offline loop (Pirate Nation archive port)
+# Offline loop — Piration v3
 
-All progress is **local** (browser `localStorage` / app storage). No server, no login, works airplane mode after first load (PWA cache).
+All progress is **local** (browser `localStorage` / app storage). No server, no
+login, works airplane mode after first load (PWA cache).
 
 ## Core loop
 
 ```
-Quest (fast timer)
-   → XP + Marks/Gold + mats + chance of cards
-        ↓
-Craft (ships / rum / cannon parts)
-        ↓
-Gauntlet (card combat)
-   → big XP + mats + guaranteed card drop(s)
-        ↓
-Stronger crew / bigger ship / fatter deck
-        ↓
-repeat
+Voyage (pick a zone)
+   -> 3 random encounters (monster / elite / cache) + optional boss
+        |
+Card combat -> XP + Marks/Gold + resources + card drops
+        |
+Port: craft ships, craft parts, repair hull, recruit crew, enhance cards
+        |
+Level up -> new zones, rarities, ships -> captain unlock missions
+        |
+Endless mode -> waves + high score -> deeper unlocks
 ```
 
-### 1. Energy (test mode = unlimited)
-- Production design: actions cost energy; regen over time.
-- **Testing now:** `CONFIG.dev.unlimitedEnergy = true` → energy shows **∞**, costs are 0.
-- Flip to `false` before Play Store.
+### 1. No energy
+- There is no energy system. The cost of sailing is **risk**: monsters damage
+  your hull, defeats cost repair resources, and tougher zones require better
+  ships and decks. Play as much as you want.
 
-### 2. Quests → XP + resources + cards
-| Quest | Focus | Card chance |
-|-------|--------|-------------|
-| Skullduggery | XP + combat loot | ~45% Attack/Skill |
-| Exploration | most mats | ~35% Defend/Skill/Resource |
-| Privateering | Marks/Gold | ~55% mixed |
+### 2. Voyages -> encounters -> loot
+- 6 zones, level-gated. Each voyage = 3 random encounters plus an optional boss.
+- Encounters: **monster** (fight), **elite** (tough, big loot), **cache** (free
+  resources), **boss** (guaranteed epic/legendary card).
+- Per encounter: Fight, Bribe (skip for Marks), or Flee (hull damage).
+- Rewards: XP, Marks, Gold, resources (Wood / Cotton / Iron / GoldNugget /
+  CannonPart / MapFragment / Rum), and card drops. Rarity gates: Rare Lv6+,
+  Epic Lv12+, Legendary Lv18+.
 
-On **Collect loot** you get:
-- **XP** on lead pirate (levels up → better gauntlet HP scaling)
-- **Marks / Gold**
-- **Resources:** Wood, Cotton, Iron, GoldNugget, CannonPart, MapFragment, Rum
-- **Card** roll (added to collection + deck)
+### 3. Port
+- **Shipwright:** Skiff -> Sloop -> Brig -> Galleon -> Dreadnought
+  (level + materials).
+- **Repair:** defeats and flees damage hull durability; repair costs resources.
+- **Workshop:** Cannon Part, Map Kit, Rum.
+- **Recruit:** crewmates (+2% damage, +4 HP each, cap +10%).
+- **Enhance:** spend Marks + a duplicate to +1 damage/shield (+2 heal), max +3.
 
-### 3. Gauntlet → XP + cards
-- Spend energy (0 in test), play cards for AP each turn.
-- **Win:** XP + Marks/Gold/Iron + **1 card** (Hard = 2).
-- **Lose:** +5 XP, 20% salvage Defend/Resource card.
+### 4. Captains
+- 6 captains, each with a unique card pool and a passive ability.
+- Unlock missions start after level 10 and get progressively harder:
+  Salty Bones (Lv10 + 20 Endless kills), Siren (Lv12 + 200 resources),
+  Ironbeard (Lv15 + 10 elite kills + 5 Cannon Parts), Mapmaker Oz
+  (Lv16 + Endless wave 25 + 10 Map Fragments), Cetus (Lv20 + wave 40 +
+  500 total kills).
 
-### 4. Craft / crew
-- Ship line: Skiff → Sloop → Brig → Galleon (costs mats).
-- Workshop: Cannon Part, Map Kit, Rum.
-- Recruit: 75 Marks + 1 Rum (needs berths = ship slots).
+### 5. Endless mode
+- Waves of 1-3 monsters, scaling forever. Free 25% heal between waves, paid
+  repairs. Score = 100/wave + 10/kill + 25/elite -> local top-10 leaderboard.
+- Run end pays XP + Gold + Iron + Marks based on depth. Deep runs are also the
+  path to the final captain unlocks.
 
-### 5. Cards
-- Start with 12-card starter deck (CC0 Pirate Nation card names).
-- Drops append copies → larger deck in gauntlet.
-- **Crew** tab lists collection counts.
+### 6. Maxing out (~20 hours)
+- Level cap 30 (total ~49,300 XP), Dreadnought, all six captains, and a fully
+  enhanced deck. Verified by `scripts/sim-progression.mjs`.
 
 ## Where to play
 ```
-C:\Users\danre\scripts\piratenation-roblox\android-game\www\index.html
+cd android && npm run serve   ->   http://localhost:5173
 ```
-Or: `cd android-game && npm run serve` → open the URL.
-
-Hard refresh if an old service worker sticks (`sw.js` is v2).
+Or open `android/www/index.html` in a browser. Hard refresh if an old service
+worker sticks (`sw.js` is v3).

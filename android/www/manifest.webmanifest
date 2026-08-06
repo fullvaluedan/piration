@@ -1,7 +1,7 @@
 {
   "name": "Piration",
   "short_name": "Piration",
-  "description": "Offline pirate RPG — quests, card gauntlet, ships, crew. Archive port inspired by Pirate Nation OSS.",
+  "description": "Offline pirate RPG — random monster encounters, loot, captains, ships, and an endless high-score mode. No energy, no servers.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

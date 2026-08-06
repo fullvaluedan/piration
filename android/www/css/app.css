@@ -44,6 +44,7 @@ html, body {
   display: flex;
   gap: 10px;
   align-items: center;
+  justify-content: space-between;
 }
 
 .skull {
@@ -82,7 +83,7 @@ h1 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
 }
 
@@ -157,6 +158,25 @@ button.btn.ghost {
   background: transparent;
   color: var(--text);
   border: 1px solid #3a557c;
+}
+
+button.btn.mini {
+  padding: 6px 10px;
+  min-height: 30px;
+  font-size: 0.72rem;
+  margin-top: 6px;
+}
+
+.help-btn {
+  margin-left: auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #3a557c;
+  background: var(--panel2);
+  color: var(--accent);
+  font-weight: 900;
+  font-size: 1rem;
 }
 
 .hand {
@@ -242,3 +262,98 @@ button.btn.ghost {
 
 .victory { color: var(--good); font-weight: 800; font-size: 1.1rem; }
 .defeat { color: var(--bad); font-weight: 800; font-size: 1.1rem; }
+
+/* v3 additions */
+
+.statline {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.statline.muted { font-size: 0.74rem; }
+
+.zone.locked { opacity: 0.55; }
+
+.pill.danger-safe { color: #6fe39a; border: 1px solid #2f8f55; }
+.pill.danger-mid { color: #e6c05a; border: 1px solid #8a6d1f; }
+.pill.danger-hard { color: #e66; border: 1px solid #a33; }
+
+.prog {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #0f1c30;
+  border: 1px solid #3a557c;
+}
+
+.dot.done { background: var(--good); border-color: var(--good); }
+
+.intent {
+  display: inline-block;
+  background: #3a1420;
+  border: 1px solid #8a3346;
+  color: #ff9bb0;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.cardline {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text);
+  margin: 4px 0;
+}
+
+.card .en {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.card.common { border-color: #3a5a88; }
+.card.rare { border-color: #3c7dd6; box-shadow: inset 0 0 0 1px rgba(60,125,214,.25); }
+.card.epic { border-color: #a05ad6; box-shadow: inset 0 0 0 1px rgba(160,90,214,.3); }
+.card.legendary { border-color: #e6aa3c; box-shadow: inset 0 0 0 1px rgba(230,170,60,.35); }
+
+.captain .pill.equipped {
+  background: var(--good);
+  color: #06210f;
+  font-weight: 800;
+}
+
+.mission p { margin: 4px 0; font-size: 0.82rem; }
+.mission p.done { color: var(--good); }
+
+.help li {
+  margin: 8px 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 420px) {
+  .tabs button {
+    padding: 8px 2px;
+    font-size: 0.72rem;
+  }
+  .hand {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  }
+  .row {
+    align-items: stretch;
+  }
+  .row .btn {
+    width: 100%;
+  }
+  .brand h1 { font-size: 1rem; }
+}

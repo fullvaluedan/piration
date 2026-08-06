@@ -8,7 +8,9 @@ Package id target: `com.fullvaluedan.piration`
 - [x] App icons 192 / 512
 - [x] Capacitor config + npm deps listed
 - [x] Privacy policy draft (docs/privacy.html) — host before listing
-- [x] Unlimited energy test flag (disable for release)
+- [x] No energy system (encounters + hull repair replace timers)
+- [x] Captains, unlock missions, Endless high-score mode
+- [x] Balance simulated to ~20h max-out (scripts/sim-progression.mjs)
 
 ## Needs your Google account (one-time)
 1. [Google Play Console](https://play.google.com/console) developer signup ($25 one-time)
@@ -25,7 +27,6 @@ Package id target: `com.fullvaluedan.piration`
 6. Play Console → Production/Internal testing → upload AAB
 7. Store listing: title, short/full description, screenshots (phone), feature graphic 1024x500, icon 512
 8. Content rating questionnaire, target audience, data safety (we store only on-device — no account)
-9. Set `CONFIG.dev.unlimitedEnergy = false` before release build
 
 ## Data safety answers (draft)
 - Data collected: **none** off device
