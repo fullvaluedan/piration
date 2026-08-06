@@ -1,0 +1,37 @@
+# deps
+node_modules/
+android/node_modules/
+
+# secrets / local
+.env
+.env.*
+!.env*.example
+android/.env*
+roblox/.env.publish
+local.properties
+**/*.keystore
+**/*.jks
+
+# build outputs
+*.apk
+*.aab
+*.log
+dist/
+build/
+android/android/.gradle/
+android/android/build/
+android/android/app/build/
+android/android/captures/
+android/android/.idea/
+roblox/PirateNation.rbxlx
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# huge upstream clones (optional local only)
+art/
+game/
+tools/*.exe

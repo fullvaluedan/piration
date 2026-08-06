@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Piration</string>
+    <string name="title_activity_main">Piration</string>
+    <string name="package_name">com.fullvaluedan.piration</string>
+    <string name="custom_url_scheme">com.fullvaluedan.piration</string>
+</resources>
