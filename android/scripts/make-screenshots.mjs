@@ -52,6 +52,7 @@ console.log("shot 1");
 
 // 2) encounter intro (skip caches)
 await click('button[data-zone="trade"]', 600);
+await click("#sailBtn", 900);
 for (let i = 0; i < 4; i++) {
   const hasCache = await page.$("#claimCache");
   if (hasCache) {

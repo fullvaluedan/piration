@@ -1,4 +1,4 @@
-const CACHE = "piration-offline-v4";
+const CACHE = "piration-offline-v5";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./js/ui.js",
   "./data/cards.json",
   "./data/game.json",
+  "./assets/manifest.json",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

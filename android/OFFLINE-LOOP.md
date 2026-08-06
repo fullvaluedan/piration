@@ -25,12 +25,17 @@ Endless mode -> waves + high score -> deeper unlocks
 
 ### 2. Voyages -> encounters -> loot
 - 6 zones, level-gated. Each voyage = 3 random encounters plus an optional boss.
+- The Voyage tab is a roamable world map: animated sea, voxel-art islands,
+  and a ship that sails to the island you chart.
 - Encounters: **monster** (fight), **elite** (tough, big loot), **cache** (free
   resources), **boss** (guaranteed epic/legendary card).
 - Per encounter: Fight, Bribe (skip for Marks), or Flee (hull damage).
 - Rewards: XP, Marks, Gold, resources (Wood / Cotton / Iron / GoldNugget /
   CannonPart / MapFragment / Rum), and card drops. Rarity gates: Rare Lv6+,
   Epic Lv12+, Legendary Lv18+.
+- Art: real voxel-style renders for cards, ships, monsters, captains, and
+  islands (CC0 from the Pirate Nation art archive). Music and SFX from the
+  MIT-licensed game archive play behind menus, battles, and actions.
 
 ### 3. Port
 - **Shipwright:** Skiff -> Sloop -> Brig -> Galleon -> Dreadnought

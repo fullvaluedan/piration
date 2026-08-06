@@ -141,6 +141,7 @@ export function newGame(cards, game) {
     voyage: null,
     combat: null,
     endless: null,
+    shipAt: "shallows",
     sawHelp: false,
     soundOn: true,
     hints: {},
@@ -178,6 +179,7 @@ export function deserialize(json, cards, game) {
     s.leaderboard = Array.isArray(s.leaderboard) ? s.leaderboard : [];
     if (typeof s.soundOn !== "boolean") s.soundOn = true;
     if (!s.hints) s.hints = {};
+    if (!s.shipAt || !zoneById(game, s.shipAt)) s.shipAt = "shallows";
     return s;
   } catch {
     return newGame(cards, game);

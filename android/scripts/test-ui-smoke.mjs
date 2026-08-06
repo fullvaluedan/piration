@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const cardsJson = readFileSync(join(root, "www/data/cards.json"), "utf8");
 const gameJson = readFileSync(join(root, "www/data/game.json"), "utf8");
+const manifestJson = readFileSync(join(root, "www/assets/manifest.json"), "utf8");
 
 // ---------- stubs ----------
 const elements = new Map();
@@ -71,6 +72,7 @@ function fakeButtons(sel) {
 globalThis.document = {
   querySelector: (sel) => el(sel.replace(/^#/, "")),
   querySelectorAll: () => [],
+  addEventListener: () => {},
   createElement: (tag) => {
     const b = makeEl("dyn_" + tag + "_" + Math.random().toString(36).slice(2, 8));
     b.tagName = String(tag).toUpperCase();
@@ -92,6 +94,7 @@ globalThis.setInterval = () => 0;
 globalThis.fetch = async (url) => {
   if (String(url).includes("cards.json")) return { json: async () => JSON.parse(cardsJson) };
   if (String(url).includes("game.json")) return { json: async () => JSON.parse(gameJson) };
+  if (String(url).includes("manifest.json")) return { json: async () => JSON.parse(manifestJson) };
   throw new Error("unexpected fetch " + url);
 };
 
@@ -132,6 +135,8 @@ check("voyage screen after help", html().includes("Set Sail") || html().includes
 // sail a voyage to combat
 const zoneBtn = el("btn_zone_shallows");
 zoneBtn.click();
+el("sailBtn").click();
+await sleep(900);
 if (html().includes("Claim cache")) {
   el("claimCache").click();
 } else if (html().includes("Fight")) {
@@ -162,7 +167,7 @@ check("voyage combat finished or resolvable", html().includes("Collect loot") ||
 el("collectBtn")?.click();
 el("dockBtn")?.click();
 el("continueBtn")?.click();
-check("back at port after voyage", html().includes("Set Sail") || !html().includes("End turn"));
+check("back at port after voyage", html().includes("High Seas") || !html().includes("End turn"));
 
 // endless flow
 clickTab("endless");
@@ -192,7 +197,7 @@ for (const [tab, needle] of [
   ["shipyard", "Shipwright"],
   ["captains", "Captain"],
   ["collection", "Enhance cards"],
-  ["voyage", "Set Sail"],
+  ["voyage", "High Seas"],
 ]) {
   clickTab(tab);
   check(`${tab} tab renders`, html().includes(needle));

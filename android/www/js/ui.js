@@ -9,6 +9,10 @@ let toastTimer = null;
 let uiPending = null; // transient result screens (not persisted)
 let audioCtx = null;
 let modalActive = false;
+let ASSETS = null; // assets/manifest.json
+let musicEl = null;
+let musicKind = null;
+let sfxCache = {};
 
 const $ = (sel) => document.querySelector(sel);
 const content = () => $("#content");
@@ -37,8 +41,52 @@ function note(freq, start, dur, type = "sine", vol = 0.12) {
   osc.stop(audioCtx.currentTime + start + dur + 0.05);
 }
 
+function assetPath(rel) {
+  return ASSETS ? "assets/" + rel : "";
+}
+
+function playFileAudio(src, volume = 0.7) {
+  if (!src) return false;
+  try {
+    const a = sfxCache[src] || (sfxCache[src] = new Audio(src));
+    a.volume = volume;
+    a.currentTime = 0;
+    const p = a.play();
+    p?.catch(() => {});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function playMusic(kind, force = false) {
+  if (!state?.soundOn) return;
+  if (musicKind === kind && !force) return;
+  if (!ASSETS?.audio?.music?.[kind]) return;
+  try {
+    if (!musicEl) musicEl = new Audio(assetPath(ASSETS.audio.music[kind]));
+    else musicEl.src = assetPath(ASSETS.audio.music[kind]);
+    musicEl.loop = true;
+    musicEl.volume = 0.35;
+    musicKind = kind;
+    const p = musicEl.play();
+    p?.catch(() => {});
+  } catch (_) {}
+}
+
+function stopMusic() {
+  if (musicEl) {
+    musicEl.pause();
+    musicEl.currentTime = 0;
+  }
+  musicKind = null;
+}
+
 function sfx(kind) {
   if (!state?.soundOn) return;
+  const file = ASSETS?.audio?.sfx?.[kind];
+  if (file && playFileAudio(assetPath(file))) return;
+  // fallback: lightweight synth
   try {
     audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
@@ -154,6 +202,29 @@ function rarityLabel(id) {
   return r.charAt(0).toUpperCase() + r.slice(1);
 }
 
+function cardArt(id) {
+  if (!ASSETS) return "";
+  return (
+    ASSETS.cards[id] ||
+    ASSETS.cards[id.replace(/_/g, " ")] ||
+    ASSETS.cards[id.replace(/ /g, "_")] ||
+    ""
+  );
+}
+
+function artImg(rel, cls, alt = "") {
+  return rel ? `<img class="${cls}" src="assets/${encodeURI(rel)}" alt="${esc(alt)}" loading="lazy">` : "";
+}
+
+function monsterArt(encounter) {
+  if (!ASSETS) return "";
+  const direct = ASSETS.mobs[encounter?.monsterId];
+  if (direct) return direct;
+  const zone = core.zoneById(CARDS.game, encounter?.zoneId);
+  const first = zone?.monsterPool?.[0];
+  return ASSETS.mobs[first] || ASSETS.mobs.abyssal_tyrant || "";
+}
+
 function xpPct() {
   const c = state.character;
   if (c.level >= core.MAX_LEVEL) return 100;
@@ -214,38 +285,98 @@ function updateTabBadges() {
   if (battle) badge.textContent = battle.mode === "endless" ? "∞" : "⚔";
 }
 
+function unlockAudio() {
+  if (!state?.soundOn) return;
+  playMusic("menu");
+}
+
+function updateMusic() {
+  if (!state?.soundOn) {
+    stopMusic();
+    return;
+  }
+  playMusic(state.combat ? "combat" : "menu");
+}
+
 // ---------- voyage ----------
+
+const ISLAND_POS = {
+  shallows: { x: 16, y: 74 },
+  trade: { x: 38, y: 54 },
+  opensea: { x: 56, y: 72 },
+  reefs: { x: 47, y: 30 },
+  triangle: { x: 72, y: 34 },
+  abyss: { x: 84, y: 58 },
+};
+
+let uiSelectedZone = null;
+let uiSailing = false;
 
 function renderZones() {
   const lvl = state.character.level;
-  let html = maybeHint("voyage", "Pick a zone and sail. Each voyage is 3 random encounters — fight, bribe, or flee. No energy, ever.");
-  html += `<div class="section"><h2>Set Sail</h2>
-    <p class="muted">Every voyage is a run of random encounters — monsters, elites, and caches. Monsters drop loot and cards. No energy: risk and hull repair keep you honest.</p>`;
+  let html = maybeHint("voyage", "This is your world. Tap an island to chart a course — each voyage is 3 random encounters. Fight, bribe, or flee. No energy, ever.");
+  const shipAt = state.shipAt || "shallows";
+  const at = ISLAND_POS[shipAt] || ISLAND_POS.shallows;
+  html += `<div class="section"><h2>High Seas</h2>
+    <div class="worldmap">
+      <div class="sea"></div>
+      <div class="wave w1"></div>
+      <div class="wave w2"></div>`;
   for (const z of CARDS.game.zones) {
     const locked = lvl < z.minLevel;
-    const danger = z.minLevel <= 6 ? "safe" : z.minLevel <= 12 ? "mid" : "hard";
-    html += `<div class="row zone ${locked ? "locked" : ""}">
-      <p>
-        <strong>${esc(z.name)}</strong> <span class="pill danger-${danger}">${locked ? `Lv ${z.minLevel}` : "Open"}</span><br/>
-        <span class="muted">${esc(z.desc)}</span>
-      </p>
-      <button class="btn" data-zone="${z.id}" ${locked ? "disabled" : ""}>${locked ? "Locked" : "Sail"}</button>
-    </div>`;
+    const p = ISLAND_POS[z.id] || { x: 20, y: 20 };
+    html += `<button class="island ${locked ? "locked" : ""}" data-zone="${z.id}"
+      style="left:${p.x}%;top:${p.y}%" title="${esc(z.name)} — Lv ${z.minLevel}">
+      ${artImg(ASSETS?.zones?.[z.id], "island-art", z.name)}
+      <span class="island-label">${esc(z.name)}</span>
+      ${locked ? `<span class="island-lock">🔒 Lv ${z.minLevel}</span>` : ""}
+    </button>`;
   }
-  html += `</div>
-  <div class="section"><h2>The Loop</h2>
-    <p class="muted">Sail → fight random monsters → loot resources and cards → return to port → craft ships, recruit crew, enhance cards → unlock captains via missions → chase the Endless high score.</p>
-  </div>`;
+  html += `<div class="shipmark" id="shipmark" style="left:${at.x}%;top:${at.y}%">
+      ${artImg(ASSETS?.ships?.[state.shipId], "ship-art", "your ship")}
+    </div>
+    </div>`;
+  const sel = CARDS.game.zones.find((z) => z.id === uiSelectedZone) || null;
+  if (sel) {
+    const locked = lvl < sel.minLevel;
+    html += `<div class="section" id="zoneInfo">
+      <div class="row">
+        <p><strong>${esc(sel.name)}</strong> <span class="pill danger-${sel.minLevel <= 6 ? "safe" : sel.minLevel <= 12 ? "mid" : "hard"}">Lv ${sel.minLevel}${locked ? " · Locked" : ""}</span><br/>
+        <span class="muted">${esc(sel.desc)}</span></p>
+        <button class="btn" id="sailBtn" ${locked || uiSailing ? "disabled" : ""}>${uiSailing ? "Sailing…" : "Set sail"}</button>
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="section"><p class="muted">Tap an island to chart a course. Sail → random encounters → loot → return to port → craft, recruit, enhance → unlock captains → chase the Endless high score.</p></div>`;
+  }
   content().innerHTML = html;
   bindHintClose();
+  bind("#sailBtn", () => {
+    if (!sel || uiSailing) return;
+    uiSailing = true;
+    sfx("sail");
+    const mark = $("#shipmark");
+    const p = ISLAND_POS[sel.id] || { x: 20, y: 20 };
+    if (mark) {
+      mark.style.left = p.x + "%";
+      mark.style.top = p.y + "%";
+    }
+    setTimeout(() => {
+      const r = core.startVoyage(state, CARDS.game, sel.id);
+      uiSailing = false;
+      if (!r.ok) return toast(r.reason);
+      state.shipAt = sel.id;
+      save();
+      render();
+    }, 750);
+    render();
+  });
   content().querySelectorAll("[data-zone]").forEach((b) =>
     b.addEventListener("click", () => {
-      const r = core.startVoyage(state, CARDS.game, b.dataset.zone);
-      if (!r.ok) return toast(r.reason);
-      sfx("coin");
-      buzz(15);
-      toast("Set sail!");
-      after();
+      if (uiSailing) return;
+      uiSelectedZone = b.dataset.zone;
+      sfx("tap");
+      render();
     })
   );
 }
@@ -453,6 +584,10 @@ function renderCombat(back) {
   let html = `<div class="section battle">
     <h2>${esc(c.enemy.name)}</h2>
     <div class="muted">${c.mode === "endless" ? `Wave ${c.endless?.wave || ""}` : ""} · ${esc(c.encounter.isElite ? "Elite" : c.encounter.isBoss ? "Boss" : "Monster")}</div>
+    <div class="battle-scene">
+      ${artImg(monsterArt(c.encounter), "enemy-sprite", c.enemy.name)}
+      ${artImg(ASSETS?.ships?.[state.shipId], "player-sprite", "your ship")}
+    </div>
     <div class="hpbar enemy"><i style="width:${ehp}%"></i></div>
     <div class="intent ${enemyIntentClass(c)}">${esc(enemyIntentText(c))}</div>
     ${endlessLine}
@@ -471,6 +606,7 @@ function renderCombat(back) {
       const dis = !base || c.ap < base.ap;
       const hint = !base ? "" : c.ap < base.ap ? ` title="Needs ${base.ap} AP"` : "";
       html += `<button class="card ${rarityClass(id)} ${dis ? "disabled" : ""}" data-hand="${i}" ${dis ? "disabled" : ""}${hint}>
+        ${artImg(cardArt(id), "card-art", base?.name)}
         <strong>${esc(base?.name || id)}</strong>
         <span class="cardline">${cardLine(id)}</span>
       </button>`;
@@ -661,6 +797,7 @@ function renderShipyard() {
   html += `<div class="section"><h2>Cargo</h2>
     <p class="muted">${parts.length ? parts.join(" · ") : "Empty hold"}</p></div>
     <div class="section"><h2>Hull — ${esc(shipStatus.ship.name)}</h2>
+    <div class="ship-display">${artImg(ASSETS?.ships?.[state.shipId], "ship-big", shipStatus.ship.name)}</div>
     <div class="hpbar"><i style="width:${shipStatus.pct}%"></i></div>
     <p class="muted">Durability ${shipStatus.pct}% · hull ${ship.hull} · cannons ${ship.cannons} (AP) · berths ${ship.slots}</p>`;
   if (rCost) {
@@ -686,6 +823,7 @@ function renderShipyard() {
           ? `Missing: ${missing}`
           : "";
     html += `<div class="row">
+      ${artImg(ASSETS?.ships?.[s.id], "ship-thumb", s.name)}
       <p><strong>${esc(s.name)}</strong> <span class="pill">Lv ${s.level}</span><br/>
       <span class="muted">hull ${s.hull} · AP ${s.cannons} · berths ${s.slots}</span><br/>
       <span class="muted">${fmtCost(s.cost)}${reason ? ` · <span class="warn">${esc(reason)}</span>` : ""}</span></p>
@@ -762,6 +900,7 @@ function renderCaptains() {
     const owned = state.collection.filter((id) => cap.pool.includes(id)).length;
     html += `<div class="section captain">
       <div class="row">
+        ${artImg(ASSETS?.captains?.[cap.id], "captain-portrait", cap.name)}
         <p><strong>${cap.icon} ${esc(cap.name)}</strong> <span class="muted">— ${esc(cap.title)}</span><br/>
         <span class="muted">${esc(cap.focus)} · ${poolCount} card pool · ${owned} owned</span><br/>
         <span class="pill">${esc(cap.ability.name)}: ${esc(cap.ability.desc)}</span></p>
@@ -836,6 +975,7 @@ function renderCollection() {
     const enh = state.enhancements?.[e.id] || 0;
     const maxed = enh >= CARDS.game.balance.enhanceMax;
     html += `<div class="card ${rarityClass(e.id)}">
+      ${artImg(cardArt(e.id), "card-art", base.name)}
       <strong>${esc(base.name)} ×${e.n}</strong>
       <span class="cardline">${cardLine(e.id)}</span>
       <span class="muted">${rarityLabel(e.id)} ${enh ? `· ENH +${enh}` : ""}</span><br/>
@@ -940,6 +1080,7 @@ function renderHelp() {
 function render() {
   refreshStats();
   if (!state.sawHelp) return renderHelp();
+  updateMusic();
   if (tab === "voyage") renderVoyage();
   else if (tab === "endless") renderEndless();
   else if (tab === "shipyard") renderShipyard();
@@ -1010,12 +1151,14 @@ function setupBackButton() {
 }
 
 async function boot() {
-  const [cardsRes, gameRes] = await Promise.all([
+  const [cardsRes, gameRes, assetsRes] = await Promise.all([
     fetch("./data/cards.json"),
     fetch("./data/game.json"),
+    fetch("./assets/manifest.json"),
   ]);
   const cardsData = await cardsRes.json();
   const game = await gameRes.json();
+  ASSETS = await assetsRes.json();
   CARDS.list = cardsData.cards;
   CARDS.byId = Object.fromEntries(cardsData.cards.map((c) => [c.id, c]));
   CARDS.game = game;
@@ -1024,6 +1167,8 @@ async function boot() {
   if (!state.hints) state.hints = {};
   bindTabs();
   setupBackButton();
+  document.addEventListener("pointerdown", unlockAudio, { once: true });
+  document.addEventListener("keydown", unlockAudio, { once: true });
   render();
   setInterval(() => {
     // keep header current without stealing focus from combat

@@ -431,6 +431,170 @@ button.btn.mini {
 .rarity.epic { color: #c79bff; border-color: #a05ad6; }
 .rarity.legendary { color: #ffe39b; border-color: #e6aa3c; }
 
+/* ---- art integration ---- */
+
+.card-art {
+  width: 100%;
+  height: 92px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 35%, #274a78 0%, #0e1b30 75%);
+  margin-bottom: 6px;
+}
+
+.battle-scene {
+  position: relative;
+  height: 150px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #1b3a63 0%, #0d1c33 60%, #08202e 100%);
+  margin-bottom: 8px;
+  border: 1px solid #2d466c;
+}
+
+.enemy-sprite {
+  position: absolute;
+  left: 8%;
+  bottom: 6px;
+  height: 130px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
+  animation: bob 3.2s ease-in-out infinite;
+}
+
+.player-sprite {
+  position: absolute;
+  right: 6%;
+  bottom: 2px;
+  height: 86px;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.5));
+  animation: bob 2.6s ease-in-out infinite reverse;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+.worldmap {
+  position: relative;
+  height: 340px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #2d466c;
+  background: linear-gradient(180deg, #16355d 0%, #0c2240 45%, #071e30 100%);
+}
+
+.sea, .wave {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sea {
+  background:
+    radial-gradient(ellipse at 25% 70%, rgba(40, 110, 150, 0.35), transparent 60%),
+    radial-gradient(ellipse at 75% 40%, rgba(30, 80, 130, 0.3), transparent 55%);
+}
+
+.wave {
+  background: repeating-linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 0 26px,
+    transparent 26px 74px
+  );
+}
+
+.wave.w1 { animation: waveMove 16s linear infinite; }
+.wave.w2 { animation: waveMove 26s linear infinite reverse; opacity: 0.6; }
+
+@keyframes waveMove {
+  from { background-position: 0 0; }
+  to { background-position: 420px 0; }
+}
+
+.island {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.island-art {
+  width: 76px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: #0d1c33;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.island.locked .island-art {
+  filter: grayscale(0.9) brightness(0.55);
+  border-color: #5a6575;
+}
+
+.island-label {
+  font-size: 0.62rem;
+  color: var(--text);
+  background: rgba(8, 16, 28, 0.8);
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.island-lock {
+  font-size: 0.6rem;
+  color: #ffd08a;
+}
+
+.shipmark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition: left 0.75s ease-in-out, top 0.75s ease-in-out;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.6));
+  pointer-events: none;
+}
+
+.ship-art {
+  height: 64px;
+  animation: bob 3s ease-in-out infinite;
+}
+
+.ship-display {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.ship-big {
+  height: 170px;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55));
+}
+
+.ship-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #0d1c33;
+  border: 1px solid #2d466c;
+}
+
+.captain-portrait {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  background: #0d1c33;
+}
+
 @media (max-width: 420px) {
   .tabs button {
     padding: 8px 2px;

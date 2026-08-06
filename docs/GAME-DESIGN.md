@@ -113,6 +113,15 @@ Costs mix resources + Marks. Crewmates (recruited with Marks + Rum) each give
 
 - `www/data/cards.json` — 151-card archive pool (existing, unchanged).
 - `www/data/game.json` — generated + authored balance data.
+- `www/assets/` — curated CC0 voxel art (cards, ships, mobs, captains, world
+  props) and MIT music/SFX, mapped by `assets/manifest.json`.
 - `www/js/core.js` — pure game logic (no DOM; reused by the simulator).
 - `www/js/ui.js` — rendering and input.
 - `docs/PLAY-STORE.md` — Android build + store checklist.
+
+## The world
+
+The Voyage tab is a roamable world map: an animated sea with six voxel-art
+islands, a ship marker that sails to the island you chart, and per-island zone
+info. Combats render enemy and ship voxel sprites in a battle scene; cards,
+captain portraits, and shipyard hulls use the same CC0 voxel art style.
