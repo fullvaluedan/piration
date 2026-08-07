@@ -34,6 +34,12 @@ Package id target: `com.fullvaluedan.piration`
 - No ads / no IAP in current build (add later if needed)
 - Privacy policy URL: host `docs/privacy.html`
 
-## Blockers on Hermes PC (as of last build)
-- JDK / Android SDK not installed → cannot produce AAB here until toolchain is installed
-- Play Console account must be yours
+## Build status (this machine)
+- JDK 21 + Android SDK 34 installed at `C:\Android` (Temurin JDK, cmdline-tools,
+  platform-tools, build-tools 34.0.0)
+- Debug APK builds with `cd android/android && gradlew assembleDebug`
+  → `app/build/outputs/apk/debug/app-debug.apk` (also copied to
+  `Piration-debug.apk` at the repo root)
+- Play Console account must be yours; a signed release AAB still needs your
+  keystore (`Build → Generate Signed Bundle` in Android Studio or
+  `./gradlew bundleRelease` with signing config)
