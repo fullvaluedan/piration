@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#12203a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description" content="Piration — offline pirate RPG. Random monster encounters, loot, captains, ships, endless high-score mode. No energy, no servers." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Piration</title>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <script>
+    // Modern browsers block module scripts and fetch() from file://, so a raw
+    // HTML preview can't run the game. Show clear instructions instead of a
+    // silently broken page.
+    (function () {
+      if (location.protocol === "file:") {
+        document.write(
+          '<div style="position:fixed;inset:0;background:#0b1424;color:#e8eef6;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;z-index:999">' +
+            '<div style="max-width:520px;padding:24px;text-align:center">' +
+              '<div style="font-size:44px">☠</div>' +
+              '<h1 style="color:#e6aa3c;margin:10px 0">Piration</h1>' +
+              '<p style="line-height:1.5">This game needs a local web server — it can\'t run from a raw HTML file preview.</p>' +
+              '<p style="background:#152338;border:1px solid #3a557c;border-radius:12px;padding:14px;text-align:left;font-size:14px">' +
+                '<b>Windows:</b> double-click <code>PLAY.bat</code> in the project root.<br/><br/>' +
+                '<b>Any OS:</b> run <code>cd android && npm run serve</code> and open the URL it prints.' +
+              '</p>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+    })();
+  </script>
+  <canvas id="worldCanvas"></canvas>
+  <div id="ambushFlash" class="ambush-flash" style="display:none">⚠ AMBUSH!</div>
+
+  <div id="worldHud">
+    <div id="hudTop">
+      <button class="hud-btn" id="menuBtn" title="Game menu">☰</button>
+      <div id="hudStatus">
+        <span id="hudMode" class="hud-chip">Sailing</span>
+        <span id="hudZone" class="hud-chip muted"></span>
+        <span id="hudSpeed" class="hud-chip muted"></span>
+      </div>
+      <div id="hudStats">
+        <span id="hudEnergy" class="hud-chip">⚡ --</span>
+        <span id="hudMarks" class="hud-chip">⛁ --</span>
+        <span id="hudGold" class="hud-chip">¤ --</span>
+        <span id="hudRes" class="hud-chip">🪵 --</span>
+      </div>
+    </div>
+    <div id="joy"><div id="joyKnob"></div></div>
+    <button id="buildBtn" class="hud-btn build-toggle" style="display:none">🏗 Build</button>
+    <button id="worldAction" class="hud-btn action" disabled>—</button>
+    <div id="hudHint" class="hud-hint">Sail to an island · watch for things in the deep…</div>
+    <div id="buildBar" class="build-bar" style="display:none">
+      <span class="build-title">Home island — place decor</span>
+      <button class="hud-btn mini-btn" data-prop="tree">🌳 Tree</button>
+      <button class="hud-btn mini-btn" data-prop="chest">🧰 Chest</button>
+      <button class="hud-btn mini-btn" data-prop="cotton">🌾 Cotton</button>
+      <button class="hud-btn mini-btn" data-prop="iron">⛏ Iron</button>
+      <button class="hud-btn mini-btn" data-prop="gold">🪙 Gold</button>
+      <button class="hud-btn mini-btn" data-prop="crate">📦 Crate</button>
+      <button class="hud-btn mini-btn" id="buildRotate">↻ Rotate</button>
+      <button class="hud-btn mini-btn" id="buildUndo">↩ Undo</button>
+      <button class="hud-btn mini-btn" id="buildClose">✕ Done</button>
+    </div>
+  </div>
+
+  <div id="app" style="display:none">
+    <header class="top">
+      <div class="brand">
+        <span class="skull">☠</span>
+        <div>
+          <h1>Piration</h1>
+          <p class="sub">Offline pirate RPG · no energy · no servers</p>
+        </div>
+        <div class="brand-actions">
+          <button class="help-btn" id="soundBtn" title="Sound on/off">🔊</button>
+          <button class="help-btn" id="helpBtn" title="How to play">?</button>
+          <button class="help-btn" id="closePanelBtn" title="Back to the world">✕</button>
+        </div>
+      </div>
+      <div id="stats" class="stats">Loading…</div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="voyage" class="active">Voyage<span id="voyageBadge" class="badge" style="display:none"></span></button>
+      <button data-tab="endless">Endless</button>
+      <button data-tab="shipyard">Shipyard</button>
+      <button data-tab="captains">Captains</button>
+      <button data-tab="collection">Collection</button>
+    </nav>
+
+    <main id="content" class="content"></main>
+
+    <div id="modal" class="modal hidden">
+      <div class="modal-box">
+        <h3 id="modalTitle"></h3>
+        <div id="modalBody"></div>
+        <div id="modalActions" class="row modal-actions"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <footer class="foot">
+      Offline · saves on device · inspired by Pirate Nation OSS (CC0/MIT)
+    </footer>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js",
+        "three/addons/": "./vendor/jsm/"
+      }
+    }
+  </script>
+  <script src="js/ui.js" type="module"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
