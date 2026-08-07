@@ -525,7 +525,8 @@ function renderVoyageResult(result) {
   const loot = fmtLoot(result.loot);
   const card = result.card ? ` · ${esc(result.card.name)}` : "";
   const lv = result.levels ? " · LEVEL UP!" : "";
-  let html = `<div class="section"><h2>Victory</h2>
+  let html = `<div class="section"><div class="banner win">VICTORY!</div>
+    <h2>Loot secured</h2>
     <p class="muted">+${result.xp} XP · +${result.marks} Marks · +${result.gold} Gold${loot ? " · " + loot : ""}${card}${lv}</p>`;
   if (result.kind === "voyage_continue") {
     html += `<div class="row"><button class="btn" id="continueBtn">Continue voyage</button>
@@ -533,7 +534,8 @@ function renderVoyageResult(result) {
   } else if (result.kind === "voyage_end") {
     html += `<button class="btn" id="dockBtn">Return to port</button>`;
   } else if (result.kind === "voyage_defeat") {
-    html = `<div class="section"><h2 class="defeat">Defeated</h2>
+    html = `<div class="section"><div class="banner lose">SUNK!</div>
+      <h2 class="defeat">Defeated</h2>
       <p class="muted">Your ship took hull damage. Repair it at the Shipyard. (+${result.xp} XP)</p>
       <button class="btn" id="dockBtn">Return to port</button>
     </div>`;
@@ -1445,6 +1447,13 @@ function updateWorldHUD(h) {
 }
 
 function startWorldAmbush(mobId) {
+  const flash = $("#ambushFlash");
+  if (flash) {
+    flash.style.display = "grid";
+    setTimeout(() => {
+      flash.style.display = "none";
+    }, 1600);
+  }
   const cost = CARDS.game.balance.energy.combatCost;
   const sp = core.spendEnergy(state, CARDS.game, cost);
   if (!sp.ok) return toast(sp.reason + " — the thing slips back beneath the waves.");

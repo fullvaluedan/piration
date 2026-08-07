@@ -772,6 +772,50 @@ button.btn.mini {
   backdrop-filter: blur(4px);
 }
 
+.ambush-flash {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 45;
+  font-size: 3.4rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #ff5a5a;
+  text-shadow: 0 0 28px rgba(255, 40, 40, 0.9), 0 0 60px rgba(255, 40, 40, 0.5);
+  animation: ambushPulse 0.7s ease-in-out infinite;
+}
+
+@keyframes ambushPulse {
+  0%, 100% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.12); opacity: 0.65; }
+}
+
+.banner {
+  text-align: center;
+  font-size: 2.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  animation: bannerPop 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.banner.win {
+  color: #ffd166;
+  text-shadow: 0 0 22px rgba(255, 209, 102, 0.75);
+}
+
+.banner.lose {
+  color: #ff6b6b;
+  text-shadow: 0 0 22px rgba(255, 80, 80, 0.75);
+}
+
+@keyframes bannerPop {
+  from { transform: scale(0.35); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 .build-toggle {
   position: absolute;
   right: 190px;

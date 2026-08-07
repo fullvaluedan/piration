@@ -184,8 +184,23 @@ export class PirationWorld {
 
     this.scene.add(new THREE.HemisphereLight(0xcfeaff, 0x3f8f4f, 0.95));
     const sun = new THREE.DirectionalLight(0xfff2cc, 1.5);
-    sun.position.set(220, 320, 120);
+    this.sunDir = new THREE.Vector3(0.55, 0.62, 0.36).normalize();
+    sun.position.copy(this.sunDir).multiplyScalar(420);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 700;
+    const sc = 70;
+    sun.shadow.camera.left = -sc;
+    sun.shadow.camera.right = sc;
+    sun.shadow.camera.top = sc;
+    sun.shadow.camera.bottom = -sc;
+    sun.shadow.bias = -0.0005;
+    this.sun = sun;
     this.scene.add(sun);
+    this.scene.add(sun.target);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.buildSky();
     this.buildFxTextures();
@@ -249,11 +264,15 @@ export class PirationWorld {
             // sun glow
             float sd = max(dot(d, sunDir), 0.0);
             sky += sunColor * (pow(sd, 6.0) * 0.16 + pow(sd, 90.0) * 0.9);
-            // clouds in the upper sky
-            float c = fbm(vec2(d.x, d.z) * 2.6 + vec2(time*0.012, 0.0));
-            float cloudMask = smoothstep(0.0, 0.5, h) * (1.0 - smoothstep(0.62, 0.95, h));
-            float clouds = smoothstep(0.55, 0.75, c) * cloudMask;
-            sky = mix(sky, vec3(1.0, 0.98, 0.94), clouds * 0.82);
+          // clouds in the upper sky
+          float c = fbm(vec2(d.x, d.z) * 2.6 + vec2(time*0.012, 0.0));
+          float cloudMask = smoothstep(0.0, 0.5, h) * (1.0 - smoothstep(0.62, 0.95, h));
+          float clouds = smoothstep(0.55, 0.75, c) * cloudMask;
+          sky = mix(sky, vec3(1.0, 0.98, 0.94), clouds * 0.82);
+          // high wispy layer
+          float c2 = fbm(vec2(d.x, d.z) * 5.2 + vec2(time*0.02, 0.0));
+          float wispy = smoothstep(0.5, 0.78, c2) * smoothstep(0.35, 0.9, h) * (1.0 - smoothstep(0.82, 0.98, h));
+          sky = mix(sky, vec3(1.0, 0.99, 0.97), wispy * 0.5);
             // haze near horizon
             sky = mix(sky, vec3(0.86, 0.93, 0.98), pow(1.0 - h, 3.0) * 0.35);
             gl_FragColor = vec4(sky, 1.0);
@@ -288,6 +307,9 @@ export class PirationWorld {
     const model = this.models[key];
     if (!model) return;
     const mesh = model.clone(true);
+    mesh.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
     const fwd = new THREE.Vector3(-Math.sin(this.ship.rotation.y), 0, -Math.cos(this.ship.rotation.y));
     const pos = this.ship.position.clone().addScaledVector(fwd, 15);
     pos.y = 0.2;
@@ -483,6 +505,9 @@ export class PirationWorld {
         uSky: { value: new THREE.Color(0xa8d8ff) },
         uSun: { value: new THREE.Vector3(0.55, 0.62, 0.36).normalize() },
         uIslands: { value: islandUniforms },
+        uShadowMap: { value: null },
+        uShadowMatrix: { value: new THREE.Matrix4() },
+        uShadowBias: { value: 0.004 },
       },
       vertexShader: `
         uniform float uTime; uniform vec4 uIslands[8];
@@ -530,6 +555,7 @@ export class PirationWorld {
         }`,
       fragmentShader: `
         uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSun; uniform float uTime;
+        uniform sampler2D uShadowMap; uniform mat4 uShadowMatrix; uniform float uShadowBias;
         varying vec3 vWorld; varying vec3 vNormal; varying float vFoam;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
         void main(){
@@ -546,6 +572,14 @@ export class PirationWorld {
           float waveFoam = smoothstep(0.62, 0.86, hash(floor(vWorld.xz * 1.4)));
           float foam = clamp(vFoam + waveFoam * 0.12, 0.0, 1.0);
           c = mix(c, vec3(0.92, 0.98, 1.0), foam);
+          // ship / mob shadows on the water
+          vec4 sp = uShadowMatrix * vec4(vWorld, 1.0);
+          vec3 sdc = sp.xyz / sp.w * 0.5 + 0.5;
+          if (sdc.z > 0.0 && sdc.z < 1.0) {
+            float depth = texture2D(uShadowMap, sdc.xy).r;
+            float lit = sdc.z - uShadowBias <= depth ? 1.0 : 0.25;
+            c *= mix(1.0, 0.6, 1.0 - lit);
+          }
           // fog toward horizon
           float fogF = smoothstep(260.0, 900.0, length(cameraPosition.xz - vWorld.xz));
           c = mix(c, vec3(0.86, 0.93, 0.98), fogF * 0.75);
@@ -680,6 +714,8 @@ export class PirationWorld {
     geo.computeVertexNormals();
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
     const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     island.add(mesh);
     this.scene.add(island);
     island.userData.def = def;
@@ -725,6 +761,7 @@ export class PirationWorld {
     const cottonCount = def.id === "hub" ? 2 : 4 + Math.floor(rng() * 2);
     const ironCount = def.id === "hub" ? 2 : 3 + Math.floor(rng() * 2);
     const goldCount = def.id === "hub" ? 2 : 2 + Math.floor(rng() * 2);
+    const rockCount = def.id === "hub" ? 3 : 6 + Math.floor(rng() * 3);
     place("wood", treeCount);
     place("cotton", cottonCount);
     place("iron", ironCount);
@@ -733,6 +770,7 @@ export class PirationWorld {
     const dummy = new THREE.Object3D();
     const treeGeo = makeMergedBoxes(TREE_BOXES);
     const goldGeo = makeMergedBoxes(GOLD_BOXES);
+    const rockGeo = makeMergedBoxes(ROCK_BOXES);
     const vcMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const makeInst = (kind, geo, mat) => {
       const items = rec[kind].items;
@@ -746,6 +784,8 @@ export class PirationWorld {
         mesh.setMatrixAt(i, dummy.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       this.scene.add(mesh);
       rec[kind].mesh = mesh;
     };
@@ -756,9 +796,43 @@ export class PirationWorld {
     makeInst("iron", ironMesh?.geometry || goldGeo, ironMesh?.material || vcMat);
     makeInst("gold", goldGeo, vcMat);
 
+    // shoreline rocks (static instanced cluster)
+    const rockItems = [];
+    for (let i = 0; i < rockCount; i++) {
+      tryPlace((x, z, h) => {
+        rockItems.push({
+          x: def.pos[0] + x,
+          z: def.pos[1] + z,
+          h,
+          rot: rng() * Math.PI * 2,
+          s: 0.8 + rng() * 0.9,
+        });
+      });
+    }
+    if (rockItems.length) {
+      const rocks = new THREE.InstancedMesh(rockGeo, vcMat, rockItems.length);
+      for (let i = 0; i < rockItems.length; i++) {
+        dummy.position.set(rockItems[i].x, rockItems[i].h + 0.05, rockItems[i].z);
+        dummy.rotation.set(0, rockItems[i].rot, 0);
+        dummy.scale.setScalar(rockItems[i].s);
+        dummy.updateMatrix();
+        rocks.setMatrixAt(i, dummy.matrix);
+      }
+      rocks.instanceMatrix.needsUpdate = true;
+      rocks.castShadow = true;
+      rocks.receiveShadow = true;
+      this.scene.add(rocks);
+    }
+
     // hub buildings + merged dock planks
     if (def.id === "hub") {
       const sw = this.models.prop_shipwright.clone(true);
+      sw.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
+      });
       sw.position.set(16, hAt(16, 12), 12);
       sw.rotation.y = 0.6;
       island.add(sw);
@@ -779,6 +853,12 @@ export class PirationWorld {
     if (!this.shipModel) console.error("no ship model available");
     else {
     this.shipModel.position.y = -0.4;
+    this.shipModel.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
     this.ship.add(this.shipModel);
     }
     this.ship.position.set(0, 0, ISLANDS[0].r + 2);
@@ -787,6 +867,9 @@ export class PirationWorld {
 
     this.player = new THREE.Group();
     const pm = this.models.player.clone(true);
+    pm.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
     pm.position.y = 0.9;
     pm.rotation.y = Math.PI;
     this.player.add(pm);
@@ -1024,6 +1107,9 @@ export class PirationWorld {
     this.buildingMeshes = [];
     for (const b of this.buildings) {
       const mesh = this.propMesh(b.prop);
+      mesh.traverse((o) => {
+        if (o.isMesh) o.castShadow = true;
+      });
       const h = this.terrainAt(b.x, b.z);
       mesh.position.set(b.x, Math.max(0.1, h), b.z);
       mesh.rotation.y = THREE.MathUtils.degToRad(b.rot || 0);
@@ -1110,6 +1196,15 @@ export class PirationWorld {
       this.sky.position.copy(this.camera.position);
       this.sky.material.uniforms.time.value = this.time;
     }
+    if (this.sun) {
+      this.sun.position.copy(this.ship.position).addScaledVector(this.sunDir, 420);
+      this.sun.target.position.copy(this.ship.position);
+      this.sun.target.updateMatrixWorld();
+    }
+    if (this.sea?.material?.uniforms?.uShadowMatrix) {
+      this.sea.material.uniforms.uShadowMap.value = this.sun.shadow.map;
+      this.sea.material.uniforms.uShadowMatrix.value.copy(this.sun.shadow.matrix);
+    }
     const input = this.readInput();
     this.updateFx(dt);
     if (this.battle) this.updateBattle(dt);
@@ -1145,7 +1240,7 @@ export class PirationWorld {
       return;
     }
     e.mesh.position.copy(e.basePos);
-    e.mesh.position.y += Math.sin(this.time * 2.3) * 0.2;
+    e.mesh.position.y = e.basePos.y + this.waveHeightAt(e.mesh.position.x, e.mesh.position.z) * 0.9;
     const es = e.shake;
     if (es.dur > 0) {
       const f = 1 - es.t / es.dur;
@@ -1186,6 +1281,16 @@ export class PirationWorld {
     return { x, y, mag: Math.hypot(x, y) };
   }
 
+  waveHeightAt(x, z) {
+    const t = this.time;
+    const w =
+      0.42 * Math.sin((0.9 * x + 0.4 * z) * 0.055 + t * 1.3) +
+      0.3 * Math.sin((-0.6 * x + 0.8 * z) * 0.075 + t * 1.7) +
+      0.22 * Math.sin((0.35 * x - 0.95 * z) * 0.11 + t * 2.1) +
+      0.16 * Math.sin((1.0 * x + 0.2 * z) * 0.16 + t * 2.6);
+    return w * 0.7;
+  }
+
   updateSail(dt, input) {
     const ship = this.ship;
     const maxSpeed = 16;
@@ -1201,9 +1306,15 @@ export class PirationWorld {
     } else {
       ship.userData.speed = 0;
     }
-    // bob
-    ship.position.y = Math.sin(this.time * 2.1) * 0.16 * (ship.userData.speed ? 1 : 0.4);
-    ship.rotation.z = Math.sin(this.time * 1.7) * 0.02;
+    // ride the waves
+    ship.position.y = this.waveHeightAt(ship.position.x, ship.position.z);
+    const e = 3;
+    const hx = this.waveHeightAt(ship.position.x + e, ship.position.z) - this.waveHeightAt(ship.position.x - e, ship.position.z);
+    const hz = this.waveHeightAt(ship.position.x, ship.position.z + e) - this.waveHeightAt(ship.position.x, ship.position.z - e);
+    const targetPitch = Math.atan2(hz, 2 * e) * 0.75;
+    const targetRoll = -Math.atan2(hx, 2 * e) * 0.75;
+    ship.rotation.x += (targetPitch - ship.rotation.x) * Math.min(1, dt * 3);
+    ship.rotation.z += (targetRoll - ship.rotation.z) * Math.min(1, dt * 3);
     // shadow + wake
     if (this.shipShadow) {
       this.shipShadow.position.set(ship.position.x, 0.1, ship.position.z);
@@ -1364,7 +1475,7 @@ export class PirationWorld {
         s.position.x += (dx / d) * s.userData.speed * dt;
         s.position.z += (dz / d) * s.userData.speed * dt;
         s.userData.t += dt;
-        s.position.y = Math.sin(s.userData.t * 1.8) * 0.14;
+        s.position.y = this.waveHeightAt(s.position.x, s.position.z) + 0.4;
       }
     }
   }
@@ -1425,6 +1536,9 @@ export class PirationWorld {
     const mobId = MOB_IDS[idx];
     const key = MOB_MODELS[idx];
     const mesh = this.models[key].clone(true);
+    mesh.traverse((o) => {
+      if (o.isMesh) o.castShadow = true;
+    });
     const fwd = new THREE.Vector3(-Math.sin(this.ship.rotation.y), 0, -Math.cos(this.ship.rotation.y));
     const pos = this.ship.position.clone().addScaledVector(fwd, 26);
     pos.y = 0.4;
@@ -1715,6 +1829,12 @@ const GOLD_BOXES = [
   { s: [0.82, 0.36, 0.82], p: [0, 0.18, 0], c: [1.0, 0.84, 0.32] },
   { s: [0.62, 0.36, 0.62], p: [0.05, 0.62, -0.04], c: [1.0, 0.82, 0.28] },
   { s: [0.46, 0.34, 0.46], p: [-0.04, 1.0, 0.05], c: [0.98, 0.78, 0.26] },
+];
+
+const ROCK_BOXES = [
+  { s: [1.7, 1.1, 1.4], p: [0, 0.55, 0], c: [0.42, 0.44, 0.5] },
+  { s: [1.0, 0.7, 0.9], p: [0.7, 0.5, 0.4], c: [0.48, 0.5, 0.56] },
+  { s: [0.8, 0.5, 0.8], p: [-0.6, 0.35, -0.5], c: [0.38, 0.4, 0.46] },
 ];
 
 function makeMergedBoxes(parts) {
