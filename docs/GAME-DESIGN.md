@@ -105,9 +105,9 @@ Costs mix resources + Marks. Crewmates (recruited with Marks + Rum) each give
 ## 20-hour max curve
 
 - Character level cap: **20** (spec: 18-22h to max).
-- XP per level: `floor(155 × level^1.12)`; total to max ≈ **39,700 XP**.
+- XP per level: `floor(130 × level^1.12)`; total to max ≈ **33,300 XP**.
 - The progression simulator (real game logic + scripted bot) reaches Lv20 in
-  ~19h of voyage time — inside the required 18-22h band, enforced by
+  ~19.6h of voyage time — inside the required 18-22h band, enforced by
   `android/scripts/sim-progression.mjs`.
 - Resource and card sinks are tuned so the last ship, last captain, and full
   enhancement track finish inside the same window.
@@ -128,3 +128,18 @@ The Voyage tab is a roamable world map: an animated sea with six voxel-art
 islands, a ship marker that sails to the island you chart, and per-island zone
 info. Combats render enemy and ship voxel sprites in a battle scene; cards,
 captain portraits, and shipyard hulls use the same CC0 voxel art style.
+
+## Decks
+
+- 60 curated cards from the archive art: 8 captains x 5 signature cards plus a
+  20-card neutral pool (assigned deterministically in game.json `cards`).
+- Combat decks are exactly **8 cards, no duplicates, at least 2 signature
+  cards** of the active captain. 5 named presets; the deck builder lives in
+  the Collection panel.
+
+## Island builder
+
+- The home island (Parrot's Perch) supports grid-snapped placement of
+  decorations and resources (trees, chests, cotton, iron, gold, crates) with
+  90-degree rotation, a live green/red ghost preview, and undo. Placements
+  persist in the save and rebuild in the 3D world.

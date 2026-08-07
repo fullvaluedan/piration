@@ -183,12 +183,12 @@
     "abyssal_tyrant_elite": "mobs/abyssal_tyrant_elite.png"
   },
   "captains": {
-    "ladylara": "captains/ladylara.png",
-    "captainbanshee": "captains/captainbanshee.png",
-    "resourcetrader": "captains/resourcetrader.png",
-    "rustbeard": "captains/rustbeard.png",
-    "captainhightide": "captains/captainhightide.png",
-    "royalnavyadmiral": "captains/royalnavyadmiral.png",
+    "ladylara": "captains/ladylara.webp",
+    "captainbanshee": "captains/captainbanshee.webp",
+    "resourcetrader": "captains/resourcetrader.webp",
+    "rustbeard": "captains/rustbeard.webp",
+    "captainhightide": "captains/captainhightide.webp",
+    "royalnavyadmiral": "captains/royalnavyadmiral.webp",
     "commodore": "captains/commodore.webp",
     "admiralironsides": "captains/admiralironsides.webp"
   },

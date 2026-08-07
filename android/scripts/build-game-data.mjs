@@ -283,6 +283,40 @@ const captains = CAPTAIN_DEFS.map((def) => ({
   pool: buildPool(def, new Set(cards.map((c) => c.id))),
 }));
 
+// ---------- curated 60-card deck pool (spec: 8x5 signatures + 20 neutral) ----------
+function pickCards(pool, n, prefer) {
+  const sorted = pool
+    .map((id) => ({ id, rarity: rarity[id] }))
+    .sort((a, b) => {
+      const ra = { legendary: 3, epic: 2, rare: 1, common: 0 }[a.rarity] || 0;
+      const rb = { legendary: 3, epic: 2, rare: 1, common: 0 }[b.rarity] || 0;
+      return rb - ra;
+    });
+  const chosen = [];
+  for (const c of sorted) {
+    if (chosen.length >= n) break;
+    if (chosen.includes(c.id)) continue;
+    if (prefer && !prefer(c.id)) continue;
+    chosen.push(c.id);
+  }
+  return chosen;
+}
+
+const signatureIds = {};
+for (const cap of CAPTAIN_DEFS) {
+  const capObj = captains.find((c) => c.id === cap.id);
+  signatureIds[cap.id] = seededShuffle(capObj.pool, hashStr("sig:" + cap.id))
+    .slice(0, 5);
+}
+const starterIdsArr = [...STARTER_IDS];
+const neutral = seededShuffle(
+  cards
+    .filter((c) => !Object.values(signatureIds).flat().includes(c.id))
+    .map((c) => c.id),
+  hashStr("neutral"),
+).filter((id) => !Object.values(signatureIds).flat().includes(id));
+const neutralIds = [...starterIdsArr, ...neutral.filter((id) => !STARTER_IDS.has(id))].slice(0, 20);
+
 // ---------- authored balance data ----------
 const GAME = {
   version: 3,
@@ -292,8 +326,8 @@ const GAME = {
     hpPerHull: 0.6,
     maxApBase: 4,
     apPerCannon: 1,
-    handSize: 5,
-    xpCurveBase: 155,
+    handSize: 4,
+    xpCurveBase: 130,
     xpCurvePower: 1.12,
     enemyLevelScale: 0.02,
     enemyLevelScaleCap: 1.4,
@@ -569,6 +603,10 @@ const GAME = {
   crewNames: ["Pegleg Pat", "Salty Rue", "Cannon Mia", "Mapmaker Oz Jr", "Reef Raider", "Jonah Flint", "Barnacle Bess", "Dicey Dan"],
   cardRarity: rarity,
   captains,
+  cards: {
+    signatures: signatureIds,
+    neutral: neutralIds,
+  },
 };
 
 writeFileSync(join(root, "www/data/game.json"), JSON.stringify(GAME, null, 2) + "\n");

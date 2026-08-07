@@ -16,6 +16,7 @@ let musicKind = null;
 let sfxCache = {};
 let world = null;
 let panelOpen = false;
+let uiDeck = null;
 
 const $ = (sel) => document.querySelector(sel);
 const content = () => $("#content");
@@ -945,6 +946,7 @@ function renderCaptains() {
     b.addEventListener("click", () => {
       const r = core.switchCaptain(state, CARDS.game, b.dataset.switch);
       if (!r.ok) return toast(r.reason);
+      uiDeck = null;
       sfx("coin");
       toast("Now commanding " + core.captainById(CARDS.game, b.dataset.switch).name);
       after();
@@ -964,16 +966,58 @@ function renderCollection() {
     .map(([id, n]) => ({ id, n, power: core.cardPower(CARDS, state, id) }))
     .sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
   const deckSize = core.combatDeck(state, CARDS, CARDS.game).length;
+  const sigs = core.signatureCards(state, CARDS.game);
+  const working = uiDeck || state.activeDeck || core.autoDeck(state, CARDS, CARDS.game);
+  const sigCount = working.filter((id) => sigs.includes(id)).length;
 
-  let html = maybeHint("collection", "Your best 30 cards sail automatically. Spend Marks + duplicates to enhance cards.");
+  let html = maybeHint("collection", "Build an 8-card deck — no duplicates, at least 2 signature cards. Spend Marks + duplicates to enhance.");
   html += `<div class="section"><h2>${esc(cap.icon)} ${esc(cap.name)} — crew & cards</h2>
-    <p class="muted">Level ${state.character.level} · ${owned.length} owned from ${cap.pool.length}-card pool · combat deck ${deckSize} (best 30)</p>`;
+    <p class="muted">Level ${state.character.level} · ${owned.length} owned from ${cap.pool.length}-card pool · combat deck ${deckSize} cards</p>`;
   if (state.crew.length) {
     html += `<p class="muted">Crew: ${state.crew.map((c) => esc(c.name)).join(", ")}</p>`;
   } else {
     html += `<p class="muted">No crew yet — recruit at the Shipyard.</p>`;
   }
   html += `</div>
+    <div class="section"><h2>Deck builder</h2>
+      <p class="muted">8 cards · no duplicates · at least 2 of ${esc(cap.name)}'s signature cards (${sigCount}/2)</p>
+      <div class="hand">`;
+  for (const id of working) {
+    const base = CARDS.byId[id];
+    const isSig = sigs.includes(id);
+    html += `<div class="card ${rarityClass(id)} deck-slot">
+      ${artImg(cardArt(id), "card-art", base?.name)}
+      <strong>${esc(base?.name || id)} ${isSig ? `<span class="sig-badge">SIG</span>` : ""}</strong>
+      <button class="btn mini ghost" data-deck-rm="${id}">Remove</button>
+    </div>`;
+  }
+  html += `</div>
+      <div class="row">
+        <button class="btn mini" id="deckAuto">Auto-build</button>
+        <button class="btn mini ghost" id="deckClear">Clear</button>
+        <button class="btn mini" id="deckEquip">Equip deck</button>
+      </div>
+      <p class="muted">Presets (save / load):</p>
+      <div class="row">`;
+  state.deckPresets.forEach((p, i) => {
+    html += `<button class="btn mini ghost" data-preset-load="${i}" title="${esc(p.name)}: ${p.ids?.length || 0} cards">${esc(p.name)} (${p.ids?.length || 0})</button>`;
+  });
+  html += `</div>
+      <div class="row"><button class="btn mini ghost" id="presetSave">Save deck to selected preset</button>
+      <select id="presetPick" class="mini-select">${state.deckPresets.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join("")}</select></div>
+      <p class="muted">Tap cards below to add/remove:</p>
+      <div class="hand">`;
+  for (const e of entries) {
+    const inDeck = working.includes(e.id);
+    const isSig = sigs.includes(e.id);
+    html += `<button class="card ${rarityClass(e.id)} ${inDeck ? "in-deck" : ""}" data-deck-add="${e.id}">
+      ${artImg(cardArt(e.id), "card-art", CARDS.byId[e.id]?.name)}
+      <strong>${esc(CARDS.byId[e.id]?.name)} ${isSig ? `<span class="sig-badge">SIG</span>` : ""}</strong>
+      <span class="cardline">${cardLine(e.id)}</span>
+      ${inDeck ? `<span class="muted">✓ in deck</span>` : ""}
+    </button>`;
+  }
+  html += `</div></div>
     <div class="section"><h2>Rarities</h2>
       <p class="muted">Rare cards drop from level ${CARDS.game.balance.rarityLevels.rare}+, Epic from ${CARDS.game.balance.rarityLevels.epic}+, Legendary from ${CARDS.game.balance.rarityLevels.legendary}+.</p>
       <p><span class="pill rarity common">Common</span> <span class="pill rarity rare">Rare</span> <span class="pill rarity epic">Epic</span> <span class="pill rarity legendary">Legendary</span></p>
@@ -1017,6 +1061,60 @@ function renderCollection() {
   </div>`;
   content().innerHTML = html;
   bindHintClose();
+  content().querySelectorAll("[data-deck-add]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const deck = uiDeck || state.activeDeck || core.autoDeck(state, CARDS, CARDS.game);
+      if (deck.includes(b.dataset.deckAdd)) return toast("Already in deck");
+      if (deck.length >= 8) return toast("Deck is full (8 cards)");
+      uiDeck = deck.concat(b.dataset.deckAdd);
+      sfx("card");
+      render();
+    })
+  );
+  content().querySelectorAll("[data-deck-rm]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const deck = uiDeck || state.activeDeck || core.autoDeck(state, CARDS, CARDS.game);
+      uiDeck = deck.filter((x) => x !== b.dataset.deckRm);
+      sfx("tap");
+      render();
+    })
+  );
+  bind("#deckAuto", () => {
+    uiDeck = core.autoDeck(state, CARDS, CARDS.game);
+    sfx("tap");
+    render();
+  });
+  bind("#deckClear", () => {
+    uiDeck = [];
+    render();
+  });
+  bind("#deckEquip", () => {
+    const v = core.validateDeck(uiDeck || [], state, CARDS, CARDS.game);
+    if (!v.ok) return toast(v.reason);
+    state.activeDeck = uiDeck.slice();
+    save();
+    sfx("coin");
+    toast("Deck equipped");
+    render();
+  });
+  bind("#presetSave", () => {
+    const v = core.validateDeck(uiDeck || [], state, CARDS, CARDS.game);
+    if (!v.ok) return toast(v.reason);
+    const idx = +($("#presetPick")?.value || 0);
+    state.deckPresets[idx].ids = uiDeck.slice();
+    save();
+    sfx("coin");
+    toast("Saved to " + state.deckPresets[idx].name);
+    render();
+  });
+  content().querySelectorAll("[data-preset-load]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const p = state.deckPresets[+b.dataset.presetLoad];
+      uiDeck = p.ids ? p.ids.slice() : core.autoDeck(state, CARDS, CARDS.game);
+      sfx("tap");
+      render();
+    })
+  );
   content().querySelectorAll("[data-enhance]").forEach((b) =>
     b.addEventListener("click", () => {
       const r = core.enhanceCard(state, CARDS, CARDS.game, b.dataset.enhance);
@@ -1166,6 +1264,22 @@ function bindTabs() {
   });
   bind("#menuBtn", () => openGamePanel("menu"));
   bind("#closePanelBtn", () => closeGamePanel());
+  bind("#buildBtn", () => {
+    world?.setBuildMode(!world.buildMode);
+    sfx("tap");
+  });
+  bind("#buildRotate", () => {
+    world?.rotateBuild();
+    sfx("tap");
+  });
+  bind("#buildUndo", () => world?.undoBuild());
+  bind("#buildClose", () => world?.setBuildMode(false));
+  document.querySelectorAll("#buildBar [data-prop]").forEach((b) =>
+    b.addEventListener("click", () => {
+      world?.setBuildProp(b.dataset.prop);
+      sfx("tap");
+    })
+  );
 }
 
 function setupBackButton() {
@@ -1249,6 +1363,17 @@ function updateWorldHUD(h) {
     actionBtn.textContent = h.action?.enabled ? h.action.label : "—";
     actionBtn.disabled = !h.action?.enabled;
   }
+  const buildBtn = $("#buildBtn");
+  if (buildBtn) {
+    buildBtn.style.display = h.mode === "walk" && h.zone === "Parrot's Perch" ? "" : "none";
+  }
+  const buildBar = $("#buildBar");
+  if (buildBar) {
+    buildBar.style.display = h.buildMode ? "" : "none";
+    buildBar.querySelectorAll("[data-prop]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.prop === h.buildProp);
+    });
+  }
 }
 
 function startWorldAmbush(mobId) {
@@ -1287,6 +1412,11 @@ function initWorld() {
       return state.energy;
     },
     spendEnergy: (n) => core.spendEnergy(state, CARDS.game, n),
+    getBuildings: () => state.buildings,
+    saveBuildings: (list) => {
+      state.buildings = list;
+      save();
+    },
     grantResource: (k, v) => {
       state.inventory[k] = (state.inventory[k] || 0) + v;
       save();
@@ -1335,5 +1465,10 @@ async function boot() {
 
 boot().catch((err) => {
   console.error(err);
-  $("#stats").textContent = "Failed to load game data";
+  $("#stats").textContent = "Couldn't start the game.";
+  const c = document.getElementById("content");
+  if (c) {
+    c.innerHTML = `<div class="section"><h2>Needs a local server</h2>
+      <p class="muted">The game loads its data over http. Double-click <strong>PLAY.bat</strong> in the project root, or run <code>cd android && npm run serve</code>.</p></div>`;
+  }
 });

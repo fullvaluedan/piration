@@ -6,8 +6,8 @@
     "hpPerHull": 0.6,
     "maxApBase": 4,
     "apPerCannon": 1,
-    "handSize": 5,
-    "xpCurveBase": 155,
+    "handSize": 4,
+    "xpCurveBase": 130,
     "xpCurvePower": 1.12,
     "enemyLevelScale": 0.02,
     "enemyLevelScaleCap": 1.4,
@@ -1518,5 +1518,87 @@
         "wheretheygo_06"
       ]
     }
-  ]
+  ],
+  "cards": {
+    "signatures": {
+      "ladylara": [
+        "new_plan",
+        "last_ditch",
+        "ap02",
+        "ap04",
+        "thorny_guard"
+      ],
+      "captainbanshee": [
+        "iron_fangs",
+        "vampiric_rain",
+        "careful_planning",
+        "ap01",
+        "time_rewritten"
+      ],
+      "resourcetrader": [
+        "critical_target",
+        "fast_hands",
+        "light_cover",
+        "focus_target",
+        "fix_it"
+      ],
+      "rustbeard": [
+        "dejavu",
+        "hit_the_dry_powder",
+        "barbed_shield",
+        "ap01",
+        "leeching_chomp"
+      ],
+      "captainhightide": [
+        "new_plan",
+        "helm_splitter",
+        "player2advantage",
+        "hasty_plan",
+        "hit_the_dry_powder"
+      ],
+      "royalnavyadmiral": [
+        "briny_relief",
+        "helm_splitter",
+        "inspiration",
+        "thorny_guard",
+        "shellsplitter"
+      ],
+      "commodore": [
+        "new_plan",
+        "ap04",
+        "hit_the_dry_powder",
+        "inspired_attack",
+        "hasty_plan"
+      ],
+      "admiralironsides": [
+        "extra_power",
+        "hasty_plan",
+        "last_ditch",
+        "advenced_attack_plan",
+        "amplify_affinity"
+      ]
+    },
+    "neutral": [
+      "cannon_blast",
+      "basic_attack_plan",
+      "basic_relief",
+      "broadside",
+      "musket_shot",
+      "patch_work",
+      "careful_aim",
+      "evasive_maneuvers",
+      "overwatch",
+      "jolly_rigging",
+      "double_shot",
+      "distress_call",
+      "commanding_presence",
+      "deadeye",
+      "riposte_stance",
+      "hit_the_weakest_point",
+      "carronade",
+      "twin_barrel_shot",
+      "iron_guard",
+      "cross_counter"
+    ]
+  }
 }

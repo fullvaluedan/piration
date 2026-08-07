@@ -15,6 +15,10 @@ npm run serve
 
 Or open `android/www/index.html` in a browser.
 
+**Windows:** double-click `PLAY.bat` in the project root — it starts the local
+server and opens the game. (The web app needs a local http server; opening
+`index.html` directly won't load its modules.)
+
 ### Offline loop
 Random monster encounters (no energy) → XP + loot + card drops → craft ships /
 enhance cards / recruit crew at port → level up → unlock captains via monster

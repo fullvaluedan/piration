@@ -65,12 +65,15 @@ Endless mode -> waves + high score -> deeper unlocks
   path to the final captain unlocks.
 
 ### 6. Maxing out (~20 hours)
-- Level cap 20 (total ~39,700 XP), Galleon, all eight captains, and a fully
+- Level cap 20 (total ~33,300 XP), Galleon, all eight captains, and a fully
   enhanced deck. Verified in the 18-22h band by `scripts/sim-progression.mjs`.
+- Decks: 8 cards, no duplicates, >=2 captain signature cards, 5 presets
+  (deck builder in the Collection panel).
+- Home island builder: grid-snapped decorations with rotation and undo.
 
 ## Where to play
 ```
 cd android && npm run serve   ->   http://localhost:5173
 ```
 Or open `android/www/index.html` in a browser. Hard refresh if an old service
-worker sticks (`sw.js` is v6).
+worker sticks (`sw.js` is v7).

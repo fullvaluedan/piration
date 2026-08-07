@@ -146,6 +146,15 @@ export function newGame(cards, game) {
     character: { level: 1, xp: 0, xpToNext: xpNeeded(game, 1) },
     inventory: defaultInventory(game),
     collection: starter.slice(),
+    activeDeck: null,
+    deckPresets: [
+      { name: "Preset 1", ids: null },
+      { name: "Preset 2", ids: null },
+      { name: "Preset 3", ids: null },
+      { name: "Preset 4", ids: null },
+      { name: "Preset 5", ids: null },
+    ],
+    buildings: [],
     enhancements: {},
     shipId: "skiff",
     shipDura: shipById(game, "skiff").hull,
@@ -221,7 +230,18 @@ export function deserialize(json, cards, game) {
       const cap = captainById(game, s.captainId);
       s.collection = (cap?.pool || []).slice(0, 12);
     }
-    if (!s.unlockedCaptains?.length) s.unlockedCaptains = ["morgaine"];
+    if (!s.unlockedCaptains?.length) s.unlockedCaptains = ["ladylara"];
+    if (!Array.isArray(s.activeDeck)) s.activeDeck = null;
+    if (!Array.isArray(s.deckPresets) || s.deckPresets.length < 5) {
+      s.deckPresets = [
+        { name: "Preset 1", ids: null },
+        { name: "Preset 2", ids: null },
+        { name: "Preset 3", ids: null },
+        { name: "Preset 4", ids: null },
+        { name: "Preset 5", ids: null },
+      ];
+    }
+    if (!Array.isArray(s.buildings)) s.buildings = [];
     if (!shipById(game, s.shipId)) s.shipId = "skiff";
     if (!s.shipDura) s.shipDura = shipById(game, s.shipId).hull;
     if (typeof s.energyMax !== "number" || !s.energyMax) s.energyMax = game.balance.energy.max;
@@ -316,22 +336,53 @@ export function cardPower(cards, state, id) {
   return p;
 }
 
-export function combatDeck(state, cards, game) {
-  const ids = ownedPoolCards(state, cards, game);
-  const counts = {};
-  for (const id of ids) counts[id] = (counts[id] || 0) + 1;
-  const entries = Object.entries(counts).map(([id, n]) => ({
-    id,
-    n,
-    power: cardPower(cards, state, id),
-  }));
-  entries.sort((a, b) => b.power - a.power || a.id.localeCompare(b.id));
-  const deck = [];
-  for (const e of entries) {
-    const copies = Math.min(e.n, 3);
-    for (let i = 0; i < copies; i++) deck.push(e.id);
+export function signatureCards(state, game) {
+  return game.cards?.signatures?.[state.captainId] || [];
+}
+
+export function validateDeck(ids, state, cards, game) {
+  if (!Array.isArray(ids) || ids.length !== 8) return { ok: false, reason: "Deck must have exactly 8 cards" };
+  if (new Set(ids).size !== ids.length) return { ok: false, reason: "No duplicate cards allowed" };
+  const owned = new Set(state.collection || []);
+  const capPool = new Set(currentCaptain(state, game)?.pool || []);
+  for (const id of ids) {
+    if (!owned.has(id)) return { ok: false, reason: "Deck contains cards you don't own" };
+    if (!capPool.has(id)) return { ok: false, reason: "Deck contains cards outside this captain's pool" };
   }
-  return deck.slice(0, 30);
+  const sigs = signatureCards(state, game);
+  const sigCount = ids.filter((id) => sigs.includes(id)).length;
+  if (sigCount < 2) return { ok: false, reason: "Include at least 2 signature cards" };
+  return { ok: true, sigCount };
+}
+
+export function autoDeck(state, cards, game) {
+  const owned = [...new Set(ownedPoolCards(state, cards, game))];
+  const sigs = signatureCards(state, game);
+  const ownedSigs = sigs.filter((id) => owned.includes(id));
+  const deck = [];
+  const add = (id) => {
+    if (deck.length < 8 && !deck.includes(id)) deck.push(id);
+  };
+  // two best signatures first
+  const orderedSigs = ownedSigs
+    .map((id) => ({ id, p: cardPower(cards, state, id) }))
+    .sort((a, b) => b.p - a.p)
+    .map((x) => x.id);
+  orderedSigs.slice(0, 2).forEach(add);
+  // fill with the strongest owned pool cards
+  const rest = owned
+    .map((id) => ({ id, p: cardPower(cards, state, id) }))
+    .sort((a, b) => b.p - a.p || a.id.localeCompare(b.id))
+    .map((x) => x.id);
+  for (const id of rest) add(id);
+  return deck;
+}
+
+export function combatDeck(state, cards, game) {
+  if (state.activeDeck && validateDeck(state.activeDeck, state, cards, game).ok) {
+    return state.activeDeck.slice();
+  }
+  return autoDeck(state, cards, game);
 }
 
 // ---------- ship / crew ----------

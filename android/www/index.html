@@ -33,8 +33,21 @@
       </div>
     </div>
     <div id="joy"><div id="joyKnob"></div></div>
+    <button id="buildBtn" class="hud-btn build-toggle" style="display:none">🏗 Build</button>
     <button id="worldAction" class="hud-btn action" disabled>—</button>
     <div id="hudHint" class="hud-hint">Sail to an island · watch for things in the deep…</div>
+    <div id="buildBar" class="build-bar" style="display:none">
+      <span class="build-title">Home island — place decor</span>
+      <button class="hud-btn mini-btn" data-prop="tree">🌳 Tree</button>
+      <button class="hud-btn mini-btn" data-prop="chest">🧰 Chest</button>
+      <button class="hud-btn mini-btn" data-prop="cotton">🌾 Cotton</button>
+      <button class="hud-btn mini-btn" data-prop="iron">⛏ Iron</button>
+      <button class="hud-btn mini-btn" data-prop="gold">🪙 Gold</button>
+      <button class="hud-btn mini-btn" data-prop="crate">📦 Crate</button>
+      <button class="hud-btn mini-btn" id="buildRotate">↻ Rotate</button>
+      <button class="hud-btn mini-btn" id="buildUndo">↩ Undo</button>
+      <button class="hud-btn mini-btn" id="buildClose">✕ Done</button>
+    </div>
   </div>
 
   <div id="app" style="display:none">

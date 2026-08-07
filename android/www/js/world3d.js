@@ -118,6 +118,12 @@ export class PirationWorld {
     this.disposed = false;
     this.terrainHeights = new Map(); // islandId -> fn(x,z)
     this.nearIsland = null;
+    this.buildMode = false;
+    this.buildProp = "tree";
+    this.buildRot = 0;
+    this.buildGhost = null;
+    this.buildings = (this.api.getBuildings?.() || []).slice();
+    this.buildingMeshes = [];
   }
 
   async init() {
@@ -140,6 +146,7 @@ export class PirationWorld {
     this.buildSea();
     await this.loadModels();
     this.buildIslands();
+    this.rebuildBuildings();
     this.buildPlayerAndShip();
     this.buildAIShips();
     this.bindInput();
@@ -256,13 +263,24 @@ export class PirationWorld {
       prop_cotton: 1.1,
       prop_iron: 1.1,
     };
-    const jobs = Object.entries(targets).map(async ([key, target]) => {
-      const gltf = await loader.loadAsync(base + MODELS[key] + ".glb");
+    for (const [key, target] of Object.entries(targets)) {
+      const loadOne = () => loader.loadAsync(base + MODELS[key] + ".glb");
+      let gltf = null;
+      for (let attempt = 0; attempt < 3 && !gltf; attempt++) {
+        try {
+          gltf = await loadOne();
+        } catch (e) {
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+      if (!gltf) {
+        console.error("model failed to load:", key);
+        return;
+      }
       const scene = gltf.scene;
       normalizeModel(scene, target);
       this.models[key] = scene;
-    });
-    await Promise.all(jobs);
+    }
   }
 
   buildIslands() {
@@ -403,9 +421,13 @@ export class PirationWorld {
   buildPlayerAndShip() {
     const shipId = this.api.getShipId();
     this.ship = new THREE.Group();
-    this.shipModel = this.models["ship_" + shipId].clone(true);
+    const model = this.models["ship_" + shipId] || this.models.ship_skiff || Object.values(this.models).find((v) => v);
+    this.shipModel = model?.clone(true) || null;
+    if (!this.shipModel) console.error("no ship model available");
+    else {
     this.shipModel.position.y = -0.4;
     this.ship.add(this.shipModel);
+    }
     this.ship.position.set(0, 0, ISLANDS[0].r + 2);
     this.ship.rotation.y = 0;
     this.scene.add(this.ship);
@@ -422,9 +444,10 @@ export class PirationWorld {
   }
 
   setShip(id) {
-    if (!this.models["ship_" + id]) return;
+    const model = this.models["ship_" + id] || this.models.ship_skiff;
+    if (!model) return;
     if (this.shipModel) this.ship.remove(this.shipModel);
-    this.shipModel = this.models["ship_" + id].clone(true);
+    this.shipModel = model.clone(true);
     this.shipModel.position.y = -0.4;
     this.ship.add(this.shipModel);
   }
@@ -484,6 +507,126 @@ export class PirationWorld {
     actionBtn?.addEventListener("click", () => this.doAction());
   }
 
+  // ---------- island builder ----------
+
+  propMesh(prop) {
+    const rng = Math.random;
+    if (prop === "tree") return makeVoxelTree(rng);
+    if (prop === "chest") return this.models.prop_chest.clone(true);
+    if (prop === "cotton") return this.models.prop_cotton.clone(true);
+    if (prop === "iron") return this.models.prop_iron.clone(true);
+    if (prop === "gold") return makeGoldStack(rng);
+    if (prop === "crate") {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.2, 1.5), new THREE.MeshLambertMaterial({ color: 0x9a6b3f })));
+      return g;
+    }
+    return new THREE.Group();
+  }
+
+  setBuildMode(on) {
+    this.buildMode = on;
+    if (on) this.spawnGhost();
+    else this.removeGhost();
+  }
+
+  setBuildProp(p) {
+    this.buildProp = p;
+    this.buildRot = 0;
+    if (this.buildMode) this.spawnGhost();
+  }
+
+  rotateBuild() {
+    this.buildRot = (this.buildRot + 90) % 360;
+    if (this.buildGhost) this.buildGhost.rotation.y = THREE.MathUtils.degToRad(this.buildRot);
+  }
+
+  spawnGhost() {
+    this.removeGhost();
+    const g = this.propMesh(this.buildProp);
+    g.traverse((o) => {
+      if (o.isMesh) {
+        o.material = o.material.clone();
+        o.material.transparent = true;
+        o.material.opacity = 0.55;
+      }
+    });
+    this.buildGhost = g;
+    this.scene.add(g);
+  }
+
+  removeGhost() {
+    if (this.buildGhost) {
+      this.scene.remove(this.buildGhost);
+      this.buildGhost = null;
+    }
+  }
+
+  updateGhost() {
+    if (!this.buildGhost) return false;
+    const fwd = new THREE.Vector3().subVectors(this.player.position, this.camera.position);
+    fwd.y = 0;
+    fwd.normalize();
+    const pos = this.player.position.clone().addScaledVector(fwd, 6);
+    const gx = Math.round(pos.x / 4) * 4;
+    const gz = Math.round(pos.z / 4) * 4;
+    const h = this.terrainAt(gx, gz);
+    const hub = ISLANDS[0];
+    const onHub = Math.hypot(gx - hub.pos[0], gz - hub.pos[1]) < hub.r - 5;
+    const overlap = this.buildings.some((b) => Math.hypot(b.x - gx, b.z - gz) < 3);
+    const valid = onHub && h > 0.15 && !overlap;
+    this.buildGhost.position.set(gx, h, gz);
+    const col = valid ? 0x3ddc5a : 0xff5a5a;
+    this.buildGhost.traverse((o) => {
+      if (o.isMesh) o.material.color.setHex(col);
+    });
+    return valid;
+  }
+
+  placeBuild() {
+    if (!this.buildGhost) return;
+    const valid = this.updateGhost();
+    if (!valid) {
+      this.api.toast("Can't build there — land only, no overlaps");
+      return;
+    }
+    const b = {
+      prop: this.buildProp,
+      x: this.buildGhost.position.x,
+      z: this.buildGhost.position.z,
+      rot: this.buildRot,
+    };
+    this.buildings.push(b);
+    this.api.saveBuildings(this.buildings);
+    this.rebuildBuildings();
+    this.api.toast("Placed " + b.prop);
+    this.api.sfx("craft");
+  }
+
+  undoBuild() {
+    if (!this.buildings.length) {
+      this.api.toast("Nothing to undo");
+      return;
+    }
+    this.buildings.pop();
+    this.api.saveBuildings(this.buildings);
+    this.rebuildBuildings();
+    this.api.toast("Undid placement");
+  }
+
+  rebuildBuildings() {
+    for (const m of this.buildingMeshes) this.scene.remove(m);
+    this.buildingMeshes = [];
+    for (const b of this.buildings) {
+      const mesh = this.propMesh(b.prop);
+      const h = this.terrainAt(b.x, b.z);
+      mesh.position.set(b.x, Math.max(0.1, h), b.z);
+      mesh.rotation.y = THREE.MathUtils.degToRad(b.rot || 0);
+      this.scene.add(mesh);
+      this.buildingMeshes.push(mesh);
+    }
+  }
+
   terrainAt(x, z) {
     let best = -10;
     for (const def of ISLANDS) {
@@ -508,7 +651,8 @@ export class PirationWorld {
   doAction() {
     const a = this.action;
     if (!a.enabled) return;
-    if (a.kind === "gather") this.gather(a.node);
+    if (this.buildMode) this.placeBuild();
+    else if (a.kind === "gather") this.gather(a.node);
     else if (a.kind === "disembark") this.disembark();
     else if (a.kind === "board") this.board();
     else if (a.kind === "shipyard") this.api.openPanel("shipyard");
@@ -548,6 +692,7 @@ export class PirationWorld {
   }
 
   board() {
+    this.setBuildMode(false);
     this.player.visible = false;
     this.mode = "sail";
     this.api.sfx("sail");
@@ -795,7 +940,11 @@ export class PirationWorld {
     let enabled = false;
     let kind = null;
     let node = null;
-    if (this.mode === "sail") {
+    if (this.buildMode) {
+      label = "Place";
+      enabled = true;
+      this.updateGhost();
+    } else if (this.mode === "sail") {
       const island = this.nearIsland;
       if (island) {
         label = "Disembark";
@@ -850,6 +999,8 @@ export class PirationWorld {
       action: this.action,
       zone: nearIslandName,
       speed: this.mode === "sail" ? Math.round((this.ship.userData.speed || 0) * 4) : 0,
+      buildMode: this.buildMode,
+      buildProp: this.buildProp,
     });
   }
 
