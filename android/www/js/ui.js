@@ -328,7 +328,27 @@ function startAmbience() {
     g.gain.value = 0.05;
     src.connect(lp).connect(g).connect(ctx.destination);
     src.start();
-    ambience = { src, gain: g };
+    // wind layer
+    const wbuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const wd = wbuf.getChannelData(0);
+    let wl = 0;
+    for (let i = 0; i < wd.length; i++) {
+      const white = Math.random() * 2 - 1;
+      wl = (wl + 0.008 * white) / 1.008;
+      wd[i] = wl * 4.0;
+    }
+    const wsrc = ctx.createBufferSource();
+    wsrc.buffer = wbuf;
+    wsrc.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 480;
+    bp.Q.value = 0.6;
+    const wg = ctx.createGain();
+    wg.gain.value = 0;
+    wsrc.connect(bp).connect(wg).connect(ctx.destination);
+    wsrc.start();
+    ambience = { src, gain: g, wind: wsrc, windGain: wg };
   } catch (_) {}
 }
 
@@ -336,6 +356,7 @@ function stopAmbience() {
   if (ambience) {
     try {
       ambience.src.stop();
+      ambience.wind?.stop();
     } catch (_) {}
     ambience = null;
   }
@@ -1543,6 +1564,12 @@ async function boot() {
     // keep header current without stealing focus from combat
     refreshStats();
   }, 2000);
+  setInterval(() => {
+    if (ambience?.windGain && world?.ship?.userData?.speed != null && audioCtx) {
+      const s = world.ship.userData.speed || 0;
+      ambience.windGain.gain.setTargetAtTime(0.02 + Math.min(0.14, s * 0.01), audioCtx.currentTime, 0.3);
+    }
+  }, 300);
 }
 
 boot().catch((err) => {

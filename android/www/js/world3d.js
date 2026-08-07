@@ -161,6 +161,7 @@ export class PirationWorld {
     this.fxSprites = [];
     this.fxCount = 0;
     this.shake = { t: 0, dur: 0, amp: 0 };
+    this.hitStop = 0;
     this.fxTex = makeRadialTexture("#ffffff", "#ffffff00");
     this.ringTex = makeRingTexture();
   }
@@ -214,6 +215,7 @@ export class PirationWorld {
     this.buildShadows();
     this.buildGulls();
     this.buildStorm();
+    this.buildBuoys();
     this.bindInput();
     this.resize();
     window.addEventListener("resize", () => this.resize());
@@ -486,9 +488,11 @@ export class PirationWorld {
           );
         }
         if (p.kind === "attack") {
+          this.hitStop = 0.12;
           this.triggerEnemyShake(0.3, 0.4);
           if (p.dmg) this.spawnDamageNumber(p.dmg, p.to.clone().setY(2.6), false);
         } else {
+          this.hitStop = 0.06;
           this.triggerShake(0.24, 0.4);
           this.triggerCameraShake(0.14, 0.3);
           if (p.dmg) this.spawnDamageNumber(p.dmg, p.to.clone().setY(2.2), true);
@@ -946,6 +950,14 @@ export class PirationWorld {
     }
     this.ship.position.set(0, 0, ISLANDS[0].r + 2);
     this.ship.rotation.y = 0;
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.7, 1.0),
+      new THREE.MeshLambertMaterial({ color: 0xe6aa3c, side: THREE.DoubleSide }),
+    );
+    flag.position.set(0, 5.6, 0);
+    flag.rotation.y = 0.5;
+    this.ship.add(flag);
+    this.shipFlag = flag;
     this.scene.add(this.ship);
 
     this.player = new THREE.Group();
@@ -1078,6 +1090,33 @@ export class PirationWorld {
       st.flash.scale.setScalar(300 + (1 - k) * 220);
     } else if (st.flash.material.opacity > 0) {
       st.flash.material.opacity = 0;
+    }
+  }
+
+  buildBuoys() {
+    const buoyGeo = makeMergedBoxes(BUOY_BOXES);
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const spots = [];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      spots.push([Math.cos(a) * 78, Math.sin(a) * 78]);
+    }
+    spots.push([85, -85], [-60, 205], [150, 125], [-210, -70]);
+    this.buoys = [];
+    for (const [x, z] of spots) {
+      const b = new THREE.Mesh(buoyGeo, mat);
+      b.position.set(x, 0.9, z);
+      b.castShadow = true;
+      this.scene.add(b);
+      this.buoys.push(b);
+    }
+  }
+
+  updateBuoys(dt) {
+    for (let i = 0; i < this.buoys.length; i++) {
+      const b = this.buoys[i];
+      b.position.y = this.waveHeightAt(b.position.x, b.position.z) * 0.9 + 0.9;
+      b.rotation.z = Math.sin(this.time * 2.1 + i * 1.3) * 0.07;
     }
   }
 
@@ -1360,6 +1399,7 @@ export class PirationWorld {
     this.updateClouds(dt);
     this.updateGulls(dt);
     this.updateStorm(dt);
+    this.updateBuoys(dt);
     this.updateAIShips(dt);
     this.updateNodes();
     this.updateAmbush(dt);
@@ -1455,6 +1495,10 @@ export class PirationWorld {
     const targetRoll = -Math.atan2(hx, 2 * e) * 0.75;
     ship.rotation.x += (targetPitch - ship.rotation.x) * Math.min(1, dt * 3);
     ship.rotation.z += (targetRoll - ship.rotation.z) * Math.min(1, dt * 3);
+    if (this.shipFlag) {
+      this.shipFlag.rotation.z = Math.sin(this.time * 5.2) * 0.16 + (ship.userData.speed > 2 ? 0.12 : 0);
+      this.shipFlag.position.y = 5.6 + Math.sin(this.time * 3.1) * 0.12;
+    }
     // shadow + wake
     if (this.shipShadow) {
       this.shipShadow.position.set(ship.position.x, 0.1, ship.position.z);
@@ -1557,6 +1601,11 @@ export class PirationWorld {
       return;
     }
     const target = this.mode === "sail" ? this.ship : this.player;
+    const targetFov = this.mode === "sail" ? 62 + Math.min(7, (this.ship.userData.speed || 0) * 0.14) : 62;
+    if (Math.abs(this.camera.fov - targetFov) > 0.05) {
+      this.camera.fov += (targetFov - this.camera.fov) * Math.min(1, dt * 2);
+      this.camera.updateProjectionMatrix();
+    }
     const dist = this.mode === "sail" ? 15 : this.mode === "walk" ? 5.6 : 5.2;
     const height = this.mode === "sail" ? 8 : this.mode === "walk" ? 3.1 : 2.6;
     const yaw = this.mode === "sail" ? this.ship.rotation.y : (this.player.rotation.y + Math.PI / 2);
@@ -1805,7 +1854,9 @@ export class PirationWorld {
   loop() {
     if (this.disposed) return;
     requestAnimationFrame(() => this.loop());
-    const dt = Math.min(0.05, this.clock.getDelta());
+    const rawDt = Math.min(0.05, this.clock.getDelta());
+    const dt = this.hitStop > 0 ? rawDt * 0.3 : rawDt;
+    if (this.hitStop > 0) this.hitStop -= rawDt;
     this.update(dt);
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
@@ -2018,6 +2069,12 @@ const PALM_BOXES = [
   { s: [2.4, 0.22, 1.0], p: [-0.6, 4.0, 0.3], c: [0.22, 0.58, 0.3], r: [0.45, 0, -0.1] },
   { s: [2.3, 0.22, 1.0], p: [0.2, 4.1, 1.0], c: [0.24, 0.56, 0.3], r: [0.1, 0.5, 0.2] },
   { s: [2.3, 0.22, 1.0], p: [0.1, 4.0, -0.8], c: [0.22, 0.6, 0.3], r: [0.1, -0.5, -0.2] },
+];
+
+const BUOY_BOXES = [
+  { s: [0.18, 1.7, 0.18], p: [0, 0.85, 0], c: [0.28, 0.3, 0.38] },
+  { s: [0.75, 0.34, 0.75], p: [0, 1.85, 0], c: [1.0, 0.76, 0.25] },
+  { s: [0.16, 0.55, 0.16], p: [0, 2.2, 0], c: [0.22, 0.24, 0.3] },
 ];
 
 function makeMergedBoxes(parts) {
