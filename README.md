@@ -19,6 +19,27 @@ Or open `android/www/index.html` in a browser.
 server and opens the game. (The web app needs a local http server; opening
 `index.html` directly won't load its modules.)
 
+**Hosted build:** play it live at
+https://fullvaluedan.github.io/piration/game/
+
+### Publishing the hosted build
+The `gh-pages` branch is a staged snapshot (docs + `android/www`). Re-publish
+after changes with:
+
+```bash
+mkdir -p /tmp/site/docs /tmp/site/game
+cp -r docs/* /tmp/site/docs/
+cp -r android/www/* /tmp/site/game/
+touch /tmp/site/.nojekyll
+cd /tmp/site && git init -b gh-pages && git add -A
+git -c user.name=fullvaluedan -c user.email=fullvaluedan@users.noreply.github.com commit -m "publish"
+git remote add origin https://github.com/fullvaluedan/piration.git
+git push -f origin gh-pages
+```
+
+GitHub Actions (`/game` + `/docs`) is also configured and will deploy
+automatically once the Actions queue processes it.
+
 ### Offline loop
 Random monster encounters (no energy) → XP + loot + card drops → craft ships /
 enhance cards / recruit crew at port → level up → unlock captains via monster

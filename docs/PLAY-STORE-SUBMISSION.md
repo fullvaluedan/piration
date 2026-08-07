@@ -48,14 +48,13 @@ Piration is an independent community archive port inspired by open-sourced
 Pirate Nation materials (CC0/MIT). Not affiliated with Proof of Play.
 ```
 
-**Privacy policy URL (working now):**
-https://raw.githack.com/fullvaluedan/piration/master/docs/privacy.html
+**Privacy policy URL:**
+https://fullvaluedan.github.io/piration/docs/privacy.html
+(fallback: https://raw.githack.com/fullvaluedan/piration/master/docs/privacy.html)
 
-Preferred once the GitHub Actions queue clears:
-https://fullvaluedan.github.io/piration/privacy.html
-(Pages is configured via `.github/workflows/pages.yml`; a queued legacy build
-delays the first `github.io` deployment. Both URLs serve the same
-`docs/privacy.html`.)
+**Hosted playable build:**
+https://fullvaluedan.github.io/piration/game/
+(staged from `android/www` onto the `gh-pages` branch)
 
 ## Assets (in `android/store-assets/`)
 
