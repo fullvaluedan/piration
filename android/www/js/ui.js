@@ -494,6 +494,8 @@ function renderEncounterIntro() {
   bind("#fightBtn", () => {
     const r = core.startFight(state, CARDS, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    const e = state.voyage?.encounters?.[state.voyage.index];
+    if (e?.monsterId) world?.setBattle(true, e.monsterId);
     sfx("tap");
     after();
   });
@@ -591,6 +593,8 @@ function renderBossPrompt() {
   bind("#fightBoss", () => {
     const r = core.startFight(state, CARDS, CARDS.game);
     if (!r.ok) return toast(r.reason);
+    const zone = core.zoneById(CARDS.game, state.voyage?.zoneId);
+    if (zone?.boss?.id) world?.setBattle(true, zone.boss.id);
     sfx("tap");
     after();
   });

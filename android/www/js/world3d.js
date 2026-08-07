@@ -170,6 +170,9 @@ export class PirationWorld {
     this.fxCount = 0;
     this.shake = { t: 0, dur: 0, amp: 0 };
     this.hitStop = 0;
+    this.avgMs = 16;
+    this.quality = 0;
+    this.qualityTimer = 3;
     this.fxTex = makeRadialTexture("#ffffff", "#ffffff00");
     this.ringTex = makeRingTexture();
   }
@@ -316,7 +319,7 @@ export class PirationWorld {
       }
       return;
     }
-    const key = MOB_MODEL_BY_ID[mobId] || "mob_anglerfish";
+    const key = this.mobIdToModel(mobId);
     const model = this.models[key];
     if (!model) return;
     const mesh = model.clone(true);
@@ -350,6 +353,13 @@ export class PirationWorld {
     playerBar.position.set(0, 3.2, 0);
     this.ship.add(playerBar);
     this.battle.playerBar = playerBar;
+  }
+
+  mobIdToModel(id) {
+    if (MOB_MODEL_BY_ID[id]) return MOB_MODEL_BY_ID[id];
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return MOB_MODELS[h % MOB_MODELS.length];
   }
 
   setBattleHp(playerPct, enemyPct) {
@@ -1905,11 +1915,41 @@ export class PirationWorld {
     if (this.disposed) return;
     requestAnimationFrame(() => this.loop());
     const rawDt = Math.min(0.05, this.clock.getDelta());
+    this.avgMs = this.avgMs * 0.92 + rawDt * 1000 * 0.08;
+    this.qualityTimer -= rawDt;
+    if (this.qualityTimer <= 0) {
+      this.qualityTimer = 3;
+      if (this.avgMs > 48 && this.quality < 2) {
+        this.quality += 1;
+        this.applyQuality();
+      } else if (this.avgMs < 24 && this.quality > 0) {
+        this.quality -= 1;
+        this.applyQuality();
+      }
+    }
     const dt = this.hitStop > 0 ? rawDt * 0.3 : rawDt;
     if (this.hitStop > 0) this.hitStop -= rawDt;
     this.update(dt);
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
+  }
+
+  applyQuality() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.renderer.setPixelRatio(this.quality === 0 ? dpr : this.quality === 1 ? Math.min(1.5, dpr) : 1);
+    if (this.bloomPass) this.bloomPass.enabled = this.quality < 2;
+    if (this.sun) {
+      const s = this.quality === 0 ? 1024 : 512;
+      if (this.sun.shadow.mapSize.x !== s) {
+        this.sun.shadow.mapSize.set(s, s);
+        if (this.sun.shadow.map) {
+          this.sun.shadow.map.dispose();
+          this.sun.shadow.map = null;
+        }
+      }
+      this.renderer.shadowMap.enabled = this.quality < 2;
+    }
+    console.info("Piration quality level:", this.quality);
   }
 
   dispose() {
