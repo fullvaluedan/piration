@@ -236,6 +236,14 @@
     "prop_tree": "models/prop_tree.glb",
     "prop_chest": "models/prop_chest.glb",
     "prop_cotton": "models/prop_cotton.glb",
-    "prop_iron": "models/prop_iron.glb"
+    "prop_iron": "models/prop_iron.glb",
+    "prop_grasshuts": "models/prop_grasshuts.glb",
+    "prop_village": "models/prop_village.glb",
+    "prop_crate_red": "models/prop_crate_red.glb",
+    "prop_crate_yellow": "models/prop_crate_yellow.glb",
+    "prop_ruins": "models/prop_ruins.glb",
+    "prop_shipwreck": "models/prop_shipwreck.glb",
+    "prop_stonehenge": "models/prop_stonehenge.glb",
+    "prop_halfhull": "models/prop_halfhull.glb"
   }
 }

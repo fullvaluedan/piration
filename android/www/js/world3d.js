@@ -39,6 +39,14 @@ const MODELS = {
   prop_chest: "prop_chest",
   prop_cotton: "prop_cotton",
   prop_iron: "prop_iron",
+  prop_grasshuts: "prop_grasshuts",
+  prop_village: "prop_village",
+  prop_crate_red: "prop_crate_red",
+  prop_crate_yellow: "prop_crate_yellow",
+  prop_ruins: "prop_ruins",
+  prop_shipwreck: "prop_shipwreck",
+  prop_stonehenge: "prop_stonehenge",
+  prop_halfhull: "prop_halfhull",
 };
 
 const MOB_MODELS = ["mob_anglerfish", "mob_deepone", "mob_charybdis"];
@@ -653,6 +661,14 @@ export class PirationWorld {
       prop_chest: 1.4,
       prop_cotton: 1.1,
       prop_iron: 1.1,
+      prop_grasshuts: 6,
+      prop_village: 8,
+      prop_crate_red: 1.1,
+      prop_crate_yellow: 1.1,
+      prop_ruins: 6,
+      prop_shipwreck: 8,
+      prop_stonehenge: 5.5,
+      prop_halfhull: 7,
     };
     for (const [key, target] of Object.entries(targets)) {
       const loadOne = () => loader.loadAsync(base + MODELS[key] + ".glb");
@@ -909,6 +925,40 @@ export class PirationWorld {
       palms.instanceMatrix.needsUpdate = true;
       palms.castShadow = true;
       this.scene.add(palms);
+    }
+
+    // crafted landmarks per island
+    const LAND = {
+      hub: ["prop_village", 1],
+      shallows: ["prop_grasshuts", 1],
+      trade: ["prop_crate_red", 2],
+      opensea: ["prop_ruins", 1],
+      reefs: ["prop_shipwreck", 1],
+      triangle: ["prop_stonehenge", 1],
+      abyss: ["prop_halfhull", 1],
+      skullbone: ["prop_crate_yellow", 2],
+      gilded: ["prop_crate_yellow", 2],
+    };
+    const lm = LAND[def.id];
+    if (lm && this.models[lm[0]]) {
+      let placed = 0;
+      for (let i = 0; i < lm[1] * 6 && placed < lm[1]; i++) {
+        tryPlace((x, z, h) => {
+          if (h > 0.55 && h < 5) {
+            const m = this.models[lm[0]].clone(true);
+            m.traverse((o) => {
+              if (o.isMesh) {
+                o.castShadow = true;
+                o.receiveShadow = true;
+              }
+            });
+            m.position.set(def.pos[0] + x, h, def.pos[1] + z);
+            m.rotation.y = rng() * Math.PI * 2;
+            placed += 1;
+            this.scene.add(m);
+          }
+        });
+      }
     }
 
     // hub buildings + merged dock planks
