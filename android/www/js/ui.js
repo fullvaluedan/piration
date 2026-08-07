@@ -17,6 +17,7 @@ let sfxCache = {};
 let world = null;
 let panelOpen = false;
 let uiDeck = null;
+let ambience = null;
 
 const $ = (sel) => document.querySelector(sel);
 const content = () => $("#content");
@@ -298,6 +299,46 @@ function updateTabBadges() {
 function unlockAudio() {
   if (!state?.soundOn) return;
   playMusic("menu");
+  startAmbience();
+}
+
+function startAmbience() {
+  if (!state?.soundOn) return;
+  try {
+    if (ambience) return;
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = audioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const dur = 4;
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * dur), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      d[i] = last * 3.5;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 420;
+    const g = ctx.createGain();
+    g.gain.value = 0.05;
+    src.connect(lp).connect(g).connect(ctx.destination);
+    src.start();
+    ambience = { src, gain: g };
+  } catch (_) {}
+}
+
+function stopAmbience() {
+  if (ambience) {
+    try {
+      ambience.src.stop();
+    } catch (_) {}
+    ambience = null;
+  }
 }
 
 function updateMusic() {
@@ -643,7 +684,7 @@ function renderCombat(back) {
       } else {
         sfx("card");
         buzz(8);
-        if (base?.damage > 0) world?.fxCard("attack");
+        if (base?.damage > 0) world?.fxCard("attack", { dmg: base.damage });
         else if (base?.shield > 0) world?.fxCard("shield");
         else if (base?.heal > 0) world?.fxCard("heal");
       }
@@ -653,8 +694,11 @@ function renderCombat(back) {
   );
   bind("#endTurn", () => {
     sfx("hit");
+    const wasBrace = state.combat?.enemy?.intent === "brace";
+    const enemyDmg = state.combat?.enemy?.dmg || 0;
     core.endTurn(state, CARDS, CARDS.game);
-    world?.fxCard("enemyAttack");
+    if (wasBrace) world?.fxCard("enemyShield");
+    else world?.fxCard("enemyAttack", { dmg: enemyDmg });
     save();
     render();
   });
@@ -1276,7 +1320,12 @@ function bindTabs() {
     state.soundOn = !state.soundOn;
     save();
     refreshStats();
-    if (state.soundOn) sfx("coin");
+    if (state.soundOn) {
+      sfx("coin");
+      startAmbience();
+    } else {
+      stopAmbience();
+    }
   });
   bind("#modal", (e) => {
     if (e.target?.id === "modal") closeModal();

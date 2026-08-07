@@ -5,6 +5,10 @@
 import * as THREE from "../vendor/three.module.min.js";
 import { GLTFLoader } from "../vendor/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "../vendor/meshopt_decoder.module.js";
+import { EffectComposer } from "../vendor/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "../vendor/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "../vendor/jsm/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "../vendor/jsm/postprocessing/ShaderPass.js";
 
 const WATER_Y = 0;
 const WORLD_R = 520;
@@ -43,6 +47,28 @@ const MOB_MODEL_BY_ID = {
   guppy_raider: "mob_anglerfish",
   reef_horror: "mob_deepone",
   abyssal_tender: "mob_charybdis",
+};
+
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    sat: { value: 1.14 },
+    con: { value: 1.07 },
+    vig: { value: 0.22 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float sat; uniform float con; uniform float vig;
+    varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      vec3 graded = mix(vec3(l), c.rgb, sat);
+      graded = (graded - 0.5) * con + 0.5;
+      vec2 d = vUv - 0.5;
+      float vign = 1.0 - vig * dot(d, d) * 2.2;
+      gl_FragColor = vec4(graded * vign, c.a);
+    }`,
 };
 
 // ---------- helpers ----------
@@ -149,6 +175,13 @@ export class PirationWorld {
     this.camera = new THREE.PerspectiveCamera(62, 16 / 9, 0.1, 2200);
     this.camera.position.set(0, 10, 40);
 
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.5, 0.75, 0.86);
+    this.composer.addPass(this.bloomPass);
+    this.gradePass = new ShaderPass(GradeShader);
+    this.composer.addPass(this.gradePass);
+
     this.scene.add(new THREE.HemisphereLight(0xcfeaff, 0x3f8f4f, 0.95));
     const sun = new THREE.DirectionalLight(0xfff2cc, 1.5);
     sun.position.set(220, 320, 120);
@@ -162,6 +195,8 @@ export class PirationWorld {
     this.rebuildBuildings();
     this.buildPlayerAndShip();
     this.buildAIShips();
+    this.buildShadows();
+    this.buildGulls();
     this.bindInput();
     this.resize();
     window.addEventListener("resize", () => this.resize());
@@ -171,50 +206,63 @@ export class PirationWorld {
 
   buildSky() {
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(1600, 24, 12),
+      new THREE.SphereGeometry(1500, 32, 20),
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
         uniforms: {
-          top: { value: new THREE.Color(0x2e9bff) },
-          mid: { value: new THREE.Color(0x8fd2ff) },
-          bot: { value: new THREE.Color(0xeefaff) },
+          top: { value: new THREE.Color(0x1f7fe8) },
+          mid: { value: new THREE.Color(0x63b8ff) },
+          bot: { value: new THREE.Color(0xbfe8ff) },
+          sunDir: { value: new THREE.Vector3(0.55, 0.62, 0.36).normalize() },
+          sunColor: { value: new THREE.Color(0xfff2c8) },
+          time: { value: 0 },
         },
-        vertexShader: `varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-        fragmentShader: `varying vec3 vPos; uniform vec3 top; uniform vec3 mid; uniform vec3 bot;
+        vertexShader: `
+          varying vec3 vDir;
           void main(){
-            float h = normalize(vPos).y;
-            vec3 c = h > 0.08 ? mix(mid, top, smoothstep(0.08, 0.55, h)) : mix(bot, mid, smoothstep(-0.15, 0.08, h));
-            gl_FragColor = vec4(c, 1.0);
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vDir = normalize(wp.xyz - cameraPosition);
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }`,
+        fragmentShader: `
+          varying vec3 vDir;
+          uniform vec3 top; uniform vec3 mid; uniform vec3 bot;
+          uniform vec3 sunDir; uniform vec3 sunColor; uniform float time;
+          float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+          float noise(vec2 p){
+            vec2 i = floor(p); vec2 f = fract(p);
+            f = f*f*(3.0-2.0*f);
+            return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
+                       mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+          }
+          float fbm(vec2 p){
+            float v = 0.0; float a = 0.55;
+            for (int i=0;i<3;i++){ v += a*noise(p); p = p*2.15 + vec2(7.3, 3.1); a *= 0.5; }
+            return v;
+          }
+          void main(){
+            vec3 d = normalize(vDir);
+            float h = d.y;
+            vec3 sky = mix(bot, mid, smoothstep(0.0, 0.22, h));
+            sky = mix(sky, top, smoothstep(0.22, 0.62, h));
+            // sun glow
+            float sd = max(dot(d, sunDir), 0.0);
+            sky += sunColor * (pow(sd, 6.0) * 0.16 + pow(sd, 90.0) * 0.9);
+            // clouds in the upper sky
+            float c = fbm(vec2(d.x, d.z) * 2.6 + vec2(time*0.012, 0.0));
+            float cloudMask = smoothstep(0.0, 0.5, h) * (1.0 - smoothstep(0.62, 0.95, h));
+            float clouds = smoothstep(0.55, 0.75, c) * cloudMask;
+            sky = mix(sky, vec3(1.0, 0.98, 0.94), clouds * 0.82);
+            // haze near horizon
+            sky = mix(sky, vec3(0.86, 0.93, 0.98), pow(1.0 - h, 3.0) * 0.35);
+            gl_FragColor = vec4(sky, 1.0);
           }`,
       }),
     );
+    this.sky = sky;
     this.scene.add(sky);
-
-    // sun disc
-    const sunTex = makeRadialTexture("#fff6d8", "#fff6d800");
-    const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, transparent: true, depthWrite: false }));
-    sunSprite.scale.set(220, 220, 1);
-    sunSprite.position.set(620, 560, -420);
-    this.scene.add(sunSprite);
-
-    // clouds
-    const cloudTex = makeCloudTexture();
     this.clouds = [];
-    const rng = mulberry32(77);
-    for (let i = 0; i < 6; i++) {
-      const sp = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.62 + rng() * 0.28, depthWrite: false }),
-      );
-      const a = rng() * Math.PI * 2;
-      const rad = 500 + rng() * 600;
-      sp.position.set(Math.cos(a) * rad, 150 + rng() * 180, Math.sin(a) * rad);
-      const s = 90 + rng() * 130;
-      sp.scale.set(s, s * 0.5, 1);
-      sp.userData.speed = 2 + rng() * 4;
-      this.scene.add(sp);
-      this.clouds.push(sp);
-    }
   }
 
   buildFxTextures() {
@@ -230,7 +278,9 @@ export class PirationWorld {
     if (!active) {
       if (this.battle) {
         this.scene.remove(this.battle.mesh);
+        if (this.battleShadow) this.scene.remove(this.battleShadow);
         this.battle = null;
+        this.battleShadow = null;
       }
       return;
     }
@@ -245,20 +295,37 @@ export class PirationWorld {
     mesh.scale.multiplyScalar(1.25);
     mesh.rotation.y = Math.atan2(this.ship.position.x - pos.x, this.ship.position.z - pos.z);
     this.scene.add(mesh);
+    const shadow = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.blobTex, transparent: true, depthWrite: false, opacity: 0.7 }),
+    );
+    shadow.scale.set(6, 2.4, 1);
+    shadow.position.set(pos.x, 0.1, pos.z);
+    this.scene.add(shadow);
     this.battle = { mesh, basePos: pos.clone(), t: 0, shake: { t: 0, dur: 0, amp: 0 } };
+    this.battleShadow = shadow;
   }
 
-  fxCard(kind) {
+  fxCard(kind, payload) {
     if (!this.battle) return;
     if (kind === "attack" || kind === "enemyAttack") {
       const from = kind === "attack" ? this.ship.position : this.battle.mesh.position;
       const to = kind === "attack" ? this.battle.mesh.position : this.ship.position;
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.28, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0x1a1a1a }),
+        new THREE.SphereGeometry(0.3, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0x2a2a2a }),
       );
       mesh.position.copy(from);
       mesh.position.y += 1.2;
+      const glow = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: this.splashTex,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
+      );
+      glow.scale.set(1.1, 1.1, 1);
+      mesh.add(glow);
       this.scene.add(mesh);
       this.projectiles.push({
         mesh,
@@ -267,10 +334,13 @@ export class PirationWorld {
         t: 0,
         dur: 0.38,
         kind,
+        dmg: payload?.dmg || 0,
       });
-      this.spawnFxSprite(this.splashTex, from.clone(), 1.4, 0.25, true);
+      this.spawnFxSprite(this.splashTex, from.clone().setY(from.y + 1.0), 1.6, 0.22, true);
     } else if (kind === "shield") {
       this.spawnFxSprite(this.ringTex, this.ship.position.clone().setY(1.2), 2.2, 0.5);
+    } else if (kind === "enemyShield") {
+      this.spawnFxSprite(this.ringTex, this.battle.mesh.position.clone().setY(2.0), 3.0, 0.55);
     } else if (kind === "heal") {
       this.spawnFxSprite(this.sparkTex, this.ship.position.clone().setY(1.6), 1.6, 0.5);
     }
@@ -279,15 +349,28 @@ export class PirationWorld {
   fxEnd(won) {
     if (!this.battle) return;
     if (won) {
+      this.battle.sink = 1;
       this.spawnFxSprite(this.splashTex, this.battle.mesh.position.clone().setY(0.5), 3.2, 0.8);
       this.spawnFxSprite(this.sparkTex, this.battle.mesh.position.clone().setY(2), 2.4, 0.7);
+      // confetti burst
+      const rng = Math.random;
+      for (let i = 0; i < 10; i++) {
+        this.spawnFxSprite(
+          this.sparkTex,
+          this.battle.mesh.position.clone().setY(1.5 + rng() * 2),
+          0.7 + rng() * 0.6,
+          0.9,
+          true,
+          new THREE.Vector3((rng() - 0.5) * 6, 3 + rng() * 4, (rng() - 0.5) * 6),
+        );
+      }
     } else {
       this.spawnFxSprite(this.smokeTex, this.ship.position.clone().setY(1.8), 3.4, 0.9);
       this.triggerShake(0.5, 0.25);
     }
   }
 
-  spawnFxSprite(tex, pos, size, life, additive = false) {
+  spawnFxSprite(tex, pos, size, life, additive = false, vel = null) {
     const mat = new THREE.SpriteMaterial({
       map: tex,
       transparent: true,
@@ -298,15 +381,33 @@ export class PirationWorld {
     s.position.copy(pos);
     s.scale.set(size, size, 1);
     this.scene.add(s);
-    this.fxSprites.push({ sprite: s, life, t: 0, max: life });
+    this.fxSprites.push({
+      sprite: s,
+      life,
+      t: 0,
+      max: life,
+      vel: vel ? vel.clone() : new THREE.Vector3(),
+      gravity: 0,
+    });
+    return this.fxSprites[this.fxSprites.length - 1];
   }
 
   triggerShake(amp, dur) {
     this.shake = { t: 0, dur, amp };
   }
 
+  triggerCameraShake(amp, dur) {
+    this.camShake = { t: 0, dur, amp };
+  }
+
   triggerEnemyShake(amp, dur) {
     if (this.battle) this.battle.shake = { t: 0, dur, amp };
+  }
+
+  spawnDamageNumber(dmg, pos, playerHit) {
+    const tex = makeTextSprite(`-${dmg}`, playerHit ? "#ff6b6b" : "#ffd166");
+    const f = this.spawnFxSprite(tex, pos, 1.6, 0.9, false, new THREE.Vector3(0, 2.2, 0));
+    f.gravity = 0.5;
   }
 
   updateFx(dt) {
@@ -319,17 +420,35 @@ export class PirationWorld {
       if (k >= 1) {
         this.scene.remove(p.mesh);
         this.projectiles.splice(i, 1);
-        this.spawnFxSprite(this.splashTex, p.to, 2.2, 0.45, true);
-        if (p.kind === "attack") this.triggerEnemyShake(0.22, 0.35);
-        else this.triggerShake(0.18, 0.35);
+        this.spawnFxSprite(this.splashTex, p.to, 2.6, 0.5, true);
+        for (let d = 0; d < 6; d++) {
+          this.spawnFxSprite(
+            this.splashTex,
+            p.to.clone(),
+            0.8 + Math.random() * 0.5,
+            0.55,
+            true,
+            new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 3, (Math.random() - 0.5) * 5),
+          );
+        }
+        if (p.kind === "attack") {
+          this.triggerEnemyShake(0.3, 0.4);
+          if (p.dmg) this.spawnDamageNumber(p.dmg, p.to.clone().setY(2.6), false);
+        } else {
+          this.triggerShake(0.24, 0.4);
+          this.triggerCameraShake(0.14, 0.3);
+          if (p.dmg) this.spawnDamageNumber(p.dmg, p.to.clone().setY(2.2), true);
+        }
       }
     }
     for (let i = this.fxSprites.length - 1; i >= 0; i--) {
       const f = this.fxSprites[i];
       f.t += dt;
       const k = Math.min(1, f.t / f.max);
+      f.sprite.position.addScaledVector(f.vel, dt);
+      if (f.gravity) f.vel.y -= f.gravity * dt;
       f.sprite.material.opacity = 1 - k;
-      f.sprite.scale.setScalar(f.sprite.scale.x + dt * 2.4);
+      f.sprite.scale.setScalar(f.sprite.scale.x + dt * 2.2);
       if (k >= 1) {
         this.scene.remove(f.sprite);
         f.sprite.material.dispose();
@@ -351,38 +470,85 @@ export class PirationWorld {
   }
 
   buildSea() {
-    const geo = new THREE.PlaneGeometry(1600, 1600, 220, 220);
+    const geo = new THREE.PlaneGeometry(2200, 2200, 260, 260);
     geo.rotateX(-Math.PI / 2);
+    const islandUniforms = ISLANDS.slice(0, 8).map((i) => new THREE.Vector4(i.pos[0], i.pos[1], i.r, 0));
+    while (islandUniforms.length < 8) islandUniforms.push(new THREE.Vector4(0, 0, 0, 0));
     const mat = new THREE.ShaderMaterial({
       side: THREE.DoubleSide,
       uniforms: {
         uTime: { value: 0 },
-        uDeep: { value: new THREE.Color(0x0f7fa8) },
-        uShallow: { value: new THREE.Color(0x2fd0c0) },
-        uSun: { value: new THREE.Vector3(0.45, 0.8, 0.35).normalize() },
+        uDeep: { value: new THREE.Color(0x0b6fa8) },
+        uShallow: { value: new THREE.Color(0x26c9bd) },
+        uSky: { value: new THREE.Color(0xa8d8ff) },
+        uSun: { value: new THREE.Vector3(0.55, 0.62, 0.36).normalize() },
+        uIslands: { value: islandUniforms },
       },
       vertexShader: `
-        uniform float uTime; varying vec3 vWorld; varying float vH;
+        uniform float uTime; uniform vec4 uIslands[8];
+        varying vec3 vWorld; varying vec3 vNormal; varying float vFoam;
+        float wave(vec2 p, float t){
+          return 0.42*sin(dot(vec2(0.9,0.4), p)*0.055 + t*1.3)
+               + 0.30*sin(dot(vec2(-0.6,0.8), p)*0.075 + t*1.7)
+               + 0.22*sin(dot(vec2(0.35,-0.95), p)*0.11 + t*2.1)
+               + 0.16*sin(dot(vec2(1.0,0.2), p)*0.16 + t*2.6);
+        }
         void main(){
           vec3 p = position;
           float t = uTime;
-          float w = sin(p.x*0.045 + t*1.4)*0.5 + cos(p.z*0.055 + t*1.1)*0.5
-                  + sin((p.x+p.z)*0.02 + t*0.7)*0.6;
+          float w = wave(p.xz, t);
           p.y += w*0.7;
-          vH = w;
+          // analytic normal from wave gradient
+          float dx = (0.42*0.055*0.9*cos(dot(vec2(0.9,0.4), p.xz)*0.055 + t*1.3)
+                    + 0.30*0.075*(-0.6)*cos(dot(vec2(-0.6,0.8), p.xz)*0.075 + t*1.7)
+                    + 0.22*0.11*0.35*cos(dot(vec2(0.35,-0.95), p.xz)*0.11 + t*2.1)
+                    + 0.16*0.16*1.0*cos(dot(vec2(1.0,0.2), p.xz)*0.16 + t*2.6));
+          float dz = (0.42*0.055*0.4*cos(dot(vec2(0.9,0.4), p.xz)*0.055 + t*1.3)
+                    + 0.30*0.075*0.8*cos(dot(vec2(-0.6,0.8), p.xz)*0.075 + t*1.7)
+                    + 0.22*0.11*(-0.95)*cos(dot(vec2(0.35,-0.95), p.xz)*0.11 + t*2.1)
+                    + 0.16*0.16*0.2*cos(dot(vec2(1.0,0.2), p.xz)*0.16 + t*2.6));
+          vec3 n = normalize(vec3(-dx, 1.0, -dz));
+          vNormal = normalize(mat3(modelMatrix) * n);
           vec4 wp = modelMatrix * vec4(p,1.0);
           vWorld = wp.xyz;
+          float shore = 1.0;
+          shore = min(shore, distance(wp.xz, uIslands[0].xz));
+          shore = min(shore, distance(wp.xz, uIslands[1].xz));
+          shore = min(shore, distance(wp.xz, uIslands[2].xz));
+          shore = min(shore, distance(wp.xz, uIslands[3].xz));
+          shore = min(shore, distance(wp.xz, uIslands[4].xz));
+          shore = min(shore, distance(wp.xz, uIslands[5].xz));
+          shore = min(shore, distance(wp.xz, uIslands[6].xz));
+          shore = min(shore, distance(wp.xz, uIslands[7].xz));
+          float rMin = 100000.0;
+          rMin = min(rMin, uIslands[0].z); rMin = min(rMin, uIslands[1].z);
+          rMin = min(rMin, uIslands[2].z); rMin = min(rMin, uIslands[3].z);
+          rMin = min(rMin, uIslands[4].z); rMin = min(rMin, uIslands[5].z);
+          rMin = min(rMin, uIslands[6].z); rMin = min(rMin, uIslands[7].z);
+          vFoam = smoothstep(rMin + 8.5, rMin + 2.0, shore) * smoothstep(0.35, 1.4, w + 0.9);
           gl_Position = projectionMatrix * viewMatrix * wp;
         }`,
       fragmentShader: `
-        uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSun;
-        varying vec3 vWorld; varying float vH;
+        uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSun; uniform float uTime;
+        varying vec3 vWorld; varying vec3 vNormal; varying float vFoam;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
         void main(){
-          vec3 base = mix(uDeep, uShallow, smoothstep(-0.8, 0.9, vH));
-          vec3 dir = normalize(vWorld - cameraPosition);
-          float spec = pow(max(dot(reflect(dir, vec3(0.,1.,0.)), uSun), 0.0), 28.0);
-          float sparkle = step(0.96, fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453));
-          vec3 c = base + vec3(1.0, 0.98, 0.85) * (spec * 0.55 + sparkle * 0.10);
+          vec3 n = normalize(vNormal);
+          vec3 view = normalize(cameraPosition - vWorld);
+          float fres = pow(1.0 - max(dot(view, n), 0.0), 3.0);
+          vec3 base = mix(uDeep, uShallow, clamp(vWorld.y * 0.18 + 0.35, 0.0, 1.0));
+          vec3 c = mix(base, uSky, fres * 0.55);
+          // sun glitter
+          float spec = pow(max(dot(reflect(-view, n), uSun), 0.0), 70.0);
+          float sparkle = step(0.985, hash(floor(vWorld.xz * 3.0) + floor(uTime * 6.0)));
+          c += vec3(1.0, 0.96, 0.82) * (spec * 0.85 + sparkle * 0.18);
+          // foam
+          float waveFoam = smoothstep(0.62, 0.86, hash(floor(vWorld.xz * 1.4)));
+          float foam = clamp(vFoam + waveFoam * 0.12, 0.0, 1.0);
+          c = mix(c, vec3(0.92, 0.98, 1.0), foam);
+          // fog toward horizon
+          float fogF = smoothstep(260.0, 900.0, length(cameraPosition.xz - vWorld.xz));
+          c = mix(c, vec3(0.86, 0.93, 0.98), fogF * 0.75);
           gl_FragColor = vec4(c, 1.0);
         }`,
     });
@@ -458,25 +624,44 @@ export class PirationWorld {
       return Math.round(h * 2.4) / 2.4;
     });
     const hAt = (x, z) => this.terrainHeights.get(def.id)(x, z);
-    const colors = [];
-    const positions = [];
-    const indices = [];
-    const col = (h) => {
-      if (h < 0.35) return [0.91, 0.82, 0.6];
-      if (h < 2.2) return [0.28, 0.72, 0.35];
-      if (h < 5) return [0.42, 0.55, 0.42];
-      return [0.55, 0.58, 0.62];
-    };
     for (let i = 0; i <= N; i++) {
       for (let j = 0; j <= N; j++) {
         const x = -r + i * cell;
         const z = -r + j * cell;
         const h = hAt(x, z);
         heights[i * (N + 1) + j] = h;
-        positions.push(x, h, z);
-        const c = col(h);
-        const shade = 0.82 + 0.18 * hash2(i, j, seed * 7);
-        colors.push(c[0] * shade, c[1] * shade, c[2] * shade);
+      }
+    }
+    const colors = [];
+    const positions = [];
+    const indices = [];
+    const colAt = (i, j) => {
+      const h = heights[i * (N + 1) + j];
+      const hn = heights[Math.max(0, i - 1) * (N + 1) + j];
+      const hs = heights[Math.min(N, i + 1) * (N + 1) + j];
+      const hw = heights[i * (N + 1) + Math.max(0, j - 1)];
+      const he = heights[i * (N + 1) + Math.min(N, j + 1)];
+      const slope = Math.max(Math.abs(h - hn), Math.abs(h - hs), Math.abs(h - hw), Math.abs(h - he)) / cell;
+      const minN = Math.min(hn, hs, hw, he);
+      const ao = Math.max(0, Math.min(1, (h - minN) * 1.6 + 0.45));
+      const shade = 0.76 + 0.24 * ao;
+      let c;
+      if (h < 0.45) c = [0.93, 0.84, 0.62];
+      else if (slope > 0.72) c = [0.48, 0.5, 0.55];
+      else if (h < 2.7) c = [0.32, 0.74, 0.34];
+      else if (h < 5.2) c = [0.45, 0.62, 0.36];
+      else c = [0.55, 0.56, 0.6];
+      if (h < 0.7) c = [c[0] * 0.92, c[1] * 0.9, c[2] * 0.82]; // damp sand
+      const jitter = 0.9 + 0.2 * hash2(i, j, seed * 7);
+      return [c[0] * shade * jitter, c[1] * shade * jitter, c[2] * shade * jitter];
+    };
+    for (let i = 0; i <= N; i++) {
+      for (let j = 0; j <= N; j++) {
+        const x = -r + i * cell;
+        const z = -r + j * cell;
+        positions.push(x, heights[i * (N + 1) + j], z);
+        const c = colAt(i, j);
+        colors.push(c[0], c[1], c[2]);
       }
     }
     for (let i = 0; i < N; i++) {
@@ -637,6 +822,55 @@ export class PirationWorld {
       sp.userData = { target: ISLANDS[1 + i % 6], speed: 5 + rng() * 3, t: rng() * 10 };
       this.scene.add(sp);
       this.aiShips.push(sp);
+    }
+  }
+
+  buildShadows() {
+    this.blobTex = makeBlobTexture();
+    const mk = (scale) => {
+      const s = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: this.blobTex, transparent: true, depthWrite: false, opacity: 0.85 }),
+      );
+      s.scale.set(scale, scale * 0.4, 1);
+      s.position.y = 0.09;
+      this.scene.add(s);
+      return s;
+    };
+    this.shipShadow = mk(7);
+    this.playerShadow = mk(2.2);
+  }
+
+  buildGulls() {
+    const tex = makeBirdTexture();
+    this.gulls = [];
+    for (let i = 0; i < 5; i++) {
+      const s = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.9 }),
+      );
+      s.userData = {
+        angle: (i / 5) * Math.PI * 2,
+        radius: 18 + i * 5,
+        height: 9 + (i % 3) * 3,
+        speed: 0.12 + i * 0.03,
+        phase: i * 1.7,
+      };
+      this.scene.add(s);
+      this.gulls.push(s);
+    }
+  }
+
+  updateGulls(dt) {
+    const t = this.time;
+    for (const g of this.gulls) {
+      const u = g.userData;
+      u.angle += u.speed * dt;
+      g.position.set(
+        this.ship.position.x + Math.cos(u.angle) * u.radius,
+        this.ship.position.y + u.height + Math.sin(t * 0.7 + u.phase) * 0.6,
+        this.ship.position.z + Math.sin(u.angle) * u.radius,
+      );
+      const flap = 0.72 + 0.28 * Math.abs(Math.sin(t * 6 + u.phase));
+      g.scale.set(1.8, 1.1 * flap, 1);
     }
   }
 
@@ -872,6 +1106,10 @@ export class PirationWorld {
 
   update(dt) {
     this.time += dt;
+    if (this.sky) {
+      this.sky.position.copy(this.camera.position);
+      this.sky.material.uniforms.time.value = this.time;
+    }
     const input = this.readInput();
     this.updateFx(dt);
     if (this.battle) this.updateBattle(dt);
@@ -886,6 +1124,7 @@ export class PirationWorld {
     this.updateCamera(dt);
     this.updateSea(dt);
     this.updateClouds(dt);
+    this.updateGulls(dt);
     this.updateAIShips(dt);
     this.updateNodes();
     this.updateAmbush(dt);
@@ -895,6 +1134,16 @@ export class PirationWorld {
 
   updateBattle(dt) {
     const e = this.battle;
+    if (this.shipShadow) this.shipShadow.position.set(this.ship.position.x, 0.1, this.ship.position.z);
+    if (this.battleShadow) this.battleShadow.position.set(e.mesh.position.x, 0.1, e.mesh.position.z);
+    if (e.sink > 0) {
+      e.sink -= dt * 1.25;
+      e.mesh.scale.setScalar(0.001 + 1.2 * Math.max(0, e.sink - 0.2));
+      e.mesh.position.y = e.basePos.y - (1 - e.sink) * 2.6;
+      if (e.sink <= 0) e.mesh.visible = false;
+      this.ship.position.y = Math.sin(this.time * 2.1) * 0.16;
+      return;
+    }
     e.mesh.position.copy(e.basePos);
     e.mesh.position.y += Math.sin(this.time * 2.3) * 0.2;
     const es = e.shake;
@@ -955,6 +1204,27 @@ export class PirationWorld {
     // bob
     ship.position.y = Math.sin(this.time * 2.1) * 0.16 * (ship.userData.speed ? 1 : 0.4);
     ship.rotation.z = Math.sin(this.time * 1.7) * 0.02;
+    // shadow + wake
+    if (this.shipShadow) {
+      this.shipShadow.position.set(ship.position.x, 0.1, ship.position.z);
+      this.shipShadow.scale.set(7 + (ship.userData.speed || 0) * 0.1, (7 + (ship.userData.speed || 0) * 0.1) * 0.4, 1);
+    }
+    if (ship.userData.speed > 5) {
+      this.wakeTimer = (this.wakeTimer || 0) + dt;
+      if (this.wakeTimer > 0.09) {
+        this.wakeTimer = 0;
+        const fwd = new THREE.Vector3(-Math.sin(ship.rotation.y), 0, -Math.cos(ship.rotation.y));
+        const stern = ship.position.clone().addScaledVector(fwd, -5.5);
+        this.spawnFxSprite(
+          this.splashTex,
+          new THREE.Vector3(stern.x + (Math.random() - 0.5) * 1.6, 0.25, stern.z + (Math.random() - 0.5) * 1.6),
+          0.9 + Math.random() * 0.8,
+          0.7,
+          true,
+          new THREE.Vector3(-fwd.x * 1.5, 0, -fwd.z * 1.5),
+        );
+      }
+    }
     // world bounds + island collision
     const d = Math.hypot(ship.position.x, ship.position.z);
     if (d > WORLD_R) {
@@ -974,6 +1244,9 @@ export class PirationWorld {
 
   updateOnFoot(dt, input) {
     const p = this.player;
+    if (this.playerShadow) {
+      this.playerShadow.position.set(p.position.x, 0.1, p.position.z);
+    }
     const onIsland = this.islandAt(p.position.x, p.position.z, -1);
     if (this.mode === "walk" && onIsland) {
       const speed = (this.keys.ShiftLeft || this.keys.ShiftRight ? 8 : 5.5);
@@ -1043,7 +1316,20 @@ export class PirationWorld {
     const t = Math.min(1, dt * 3.2);
     this.camera.position.lerp(desired, t);
     const look = new THREE.Vector3().copy(target.position);
+    if (this.mode === "sail") {
+      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      look.addScaledVector(fwd, 7);
+    }
     look.y += this.mode === "sail" ? 1.5 : 1.1;
+    if (this.camShake && this.camShake.dur > 0) {
+      this.camShake.t += dt;
+      const f = 1 - this.camShake.t / this.camShake.dur;
+      if (this.camShake.t >= this.camShake.dur) this.camShake.dur = 0;
+      else {
+        this.camera.position.x += (Math.random() - 0.5) * this.camShake.amp * f;
+        this.camera.position.y += (Math.random() - 0.5) * this.camShake.amp * f;
+      }
+    }
     this.camera.lookAt(look);
   }
 
@@ -1052,6 +1338,7 @@ export class PirationWorld {
   }
 
   updateClouds(dt) {
+    if (!this.clouds.length) return;
     for (const c of this.clouds) {
       c.position.x += c.userData.speed * dt;
       if (c.position.x > 1300) c.position.x = -1300;
@@ -1120,6 +1407,7 @@ export class PirationWorld {
       else {
         const dir = new THREE.Vector3().subVectors(this.ship.position, this.ambush.mesh.position).normalize();
         this.ambush.mesh.position.addScaledVector(dir, 2.4 * dt);
+        if (this.ambushShadow) this.ambushShadow.position.set(this.ambush.mesh.position.x, 0.1, this.ambush.mesh.position.z);
         if (d < 7) {
           const mobId = this.ambush.mobId;
           this.removeAmbush();
@@ -1143,7 +1431,14 @@ export class PirationWorld {
     mesh.position.copy(pos);
     mesh.scale.multiplyScalar(1.15);
     this.scene.add(mesh);
+    const shadow = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: this.blobTex, transparent: true, depthWrite: false, opacity: 0.7 }),
+    );
+    shadow.scale.set(5, 2, 1);
+    shadow.position.set(pos.x, 0.1, pos.z);
+    this.scene.add(shadow);
     this.ambush = { mesh, mobId, removed: false, t: 0 };
+    this.ambushShadow = shadow;
     this.api.toast("⚠ Something stirs in the deep…");
     this.api.sfx("whoosh");
   }
@@ -1151,7 +1446,9 @@ export class PirationWorld {
   removeAmbush() {
     if (this.ambush && !this.ambush.removed) {
       this.scene.remove(this.ambush.mesh);
+      if (this.ambushShadow) this.scene.remove(this.ambushShadow);
       this.ambush.removed = true;
+      this.ambushShadow = null;
     }
     this.ambush = null;
   }
@@ -1237,6 +1534,8 @@ export class PirationWorld {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.composer?.setSize(w, h);
+    this.bloomPass?.setSize(w, h);
   }
 
   jumpTo(id) {
@@ -1254,7 +1553,8 @@ export class PirationWorld {
     requestAnimationFrame(() => this.loop());
     const dt = Math.min(0.05, this.clock.getDelta());
     this.update(dt);
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
@@ -1291,6 +1591,56 @@ function makeRadialTexture(inner, outer) {
   g.addColorStop(1, outer);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeTextSprite(text, color) {
+  const c = document.createElement("canvas");
+  c.width = 256;
+  c.height = 96;
+  const ctx = c.getContext("2d");
+  ctx.font = "bold 64px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = "rgba(10,20,34,0.9)";
+  ctx.strokeText(text, 128, 48);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 128, 48);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeBlobTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(64, 64, 10, 64, 64, 64);
+  g.addColorStop(0, "rgba(4,12,20,0.55)");
+  g.addColorStop(1, "rgba(4,12,20,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeBirdTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 96;
+  const ctx = c.getContext("2d");
+  ctx.strokeStyle = "rgba(25,35,50,0.8)";
+  ctx.lineWidth = 6;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(14, 58);
+  ctx.quadraticCurveTo(64, 26, 114, 48);
+  ctx.moveTo(14, 58);
+  ctx.quadraticCurveTo(64, 42, 114, 48);
+  ctx.stroke();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;

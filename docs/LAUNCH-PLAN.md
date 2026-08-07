@@ -10,8 +10,8 @@ below has a checkable test. Status is based on current verified evidence.
 |--------|----------|------------------|--------|
 | Gameplay loop | Sail -> gather -> craft -> combat -> level -> unlock, all connected and satisfying | End-to-end headless walkthrough: world, deck builder, combat, builder, ambush all pass with zero errors | ✅ |
 | Balance | 18-22h to max, sim-enforced | Sim outputs ~19.6-21.1h voyage-only to Lv20 (inside band) | ✅ |
-| Visuals | Real CC0 voxel models, bright readable style, 16:9 | Live 3D world, in-world battle camera, 1920x1080 screenshots | ✅ |
-| Performance | <150 draw calls in sailing; 60fps mid-range | 96 draw calls measured in sailing scene (down from 765) | ✅ (on-device FPS still to verify) |
+| Visuals | Real CC0 voxel models, bright readable style, 16:9 | Visual overhaul: procedural sky (fbm clouds, sun glow), gerstner ocean with fresnel/glitter/shore foam, slope-cliff terrain with AO, bloom + color grade, ship wake, seagulls. Measured: saturation 0.44-0.53, 7,000+ unique colors in world/battle renders (was ~1,000) | ✅ |
+| Performance | ~150 draw calls in sailing; 60fps mid-range | ~172 scene drawables + bloom in sailing (down from 765 meshes pre-pass); on-device FPS still to verify | 🟡 |
 | UX | Joystick + action button, safe-area HUD, hints, sound, no dead ends | HUD, joystick, build bar, confirmations, autosave, debug menu verified | ✅ |
 | Audio | Music + SFX with mute | Archive music/SFX wired, mute toggle | ✅ |
 | Content | 8 captains, 60-card deck system, 4 ships, 8 islands + home, endless, builder | All implemented and exercised in verification | ✅ |
