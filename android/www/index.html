@@ -15,6 +15,28 @@
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
+  <script>
+    // Modern browsers block module scripts and fetch() from file://, so a raw
+    // HTML preview can't run the game. Show clear instructions instead of a
+    // silently broken page.
+    (function () {
+      if (location.protocol === "file:") {
+        document.write(
+          '<div style="position:fixed;inset:0;background:#0b1424;color:#e8eef6;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;z-index:999">' +
+            '<div style="max-width:520px;padding:24px;text-align:center">' +
+              '<div style="font-size:44px">☠</div>' +
+              '<h1 style="color:#e6aa3c;margin:10px 0">Piration</h1>' +
+              '<p style="line-height:1.5">This game needs a local web server — it can\'t run from a raw HTML file preview.</p>' +
+              '<p style="background:#152338;border:1px solid #3a557c;border-radius:12px;padding:14px;text-align:left;font-size:14px">' +
+                '<b>Windows:</b> double-click <code>PLAY.bat</code> in the project root.<br/><br/>' +
+                '<b>Any OS:</b> run <code>cd android && npm run serve</code> and open the URL it prints.' +
+              '</p>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+    })();
+  </script>
   <canvas id="worldCanvas"></canvas>
 
   <div id="worldHud">
