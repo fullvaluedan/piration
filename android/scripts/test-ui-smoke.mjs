@@ -70,6 +70,7 @@ function fakeButtons(sel) {
 }
 
 globalThis.document = {
+  body: { classList: { toggle() {} } },
   querySelector: (sel) => el(sel.replace(/^#/, "")),
   querySelectorAll: () => [],
   getElementById: () => null,

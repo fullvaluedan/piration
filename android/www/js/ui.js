@@ -1298,6 +1298,7 @@ function renderHelp() {
 // ---------- render ----------
 
 function render() {
+  document.body.classList.toggle("in-battle", !!state.combat);
   refreshStats();
   if (!state.sawHelp) return renderHelp();
   updateMusic();

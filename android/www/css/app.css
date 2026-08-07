@@ -811,6 +811,75 @@ button.btn.mini {
   text-shadow: 0 0 22px rgba(255, 80, 80, 0.75);
 }
 
+/* battle overlay: cards float over the live 3D world */
+body.in-battle #app {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  top: auto;
+  width: min(980px, 96vw);
+  max-height: 48vh;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(6, 12, 22, 0.66);
+  box-shadow: 0 12px 46px rgba(0, 0, 0, 0.55);
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
+}
+
+body.in-battle .brand,
+body.in-battle .top,
+body.in-battle .tabs,
+body.in-battle .foot {
+  display: none;
+}
+
+body.in-battle .content {
+  padding: 6px 4px;
+  background: transparent;
+  border: 0;
+}
+
+body.in-battle .section {
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  margin-bottom: 5px;
+}
+
+body.in-battle .section h2 {
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+body.in-battle .battle-scene {
+  display: none;
+}
+
+body.in-battle .hand {
+  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+  gap: 6px;
+}
+
+body.in-battle .card {
+  min-height: 108px;
+  padding: 6px;
+}
+
+body.in-battle .card-art {
+  height: 56px;
+}
+
+body.in-battle .log {
+  max-height: 52px;
+  font-size: 0.72rem;
+}
+
+body.in-battle .combat-actions {
+  margin-top: 4px;
+}
+
 @keyframes bannerPop {
   from { transform: scale(0.35); opacity: 0; }
   to { transform: scale(1); opacity: 1; }

@@ -14,15 +14,15 @@ const WATER_Y = 0;
 const WORLD_R = 520;
 
 const ISLANDS = [
-  { id: "hub", name: "Parrot's Perch", pos: [0, 0], r: 60, seed: 101 },
-  { id: "shallows", name: "Sunny Shallows", pos: [155, 0], r: 44, seed: 202 },
-  { id: "trade", name: "Trade Routes", pos: [-150, 135], r: 50, seed: 303 },
-  { id: "opensea", name: "Open Sea", pos: [205, -165], r: 54, seed: 404 },
-  { id: "reefs", name: "Sunken Reefs", pos: [-255, -135], r: 56, seed: 505 },
-  { id: "triangle", name: "Devil's Triangle", pos: [-45, -265], r: 60, seed: 606 },
-  { id: "abyss", name: "The Abyss", pos: [335, 95], r: 66, seed: 707 },
-  { id: "skullbone", name: "Skullbone Cove", pos: [95, 250], r: 50, seed: 808 },
-  { id: "gilded", name: "Gilded Straits", pos: [-330, 65], r: 62, seed: 909 },
+  { id: "hub", name: "Parrot's Perch", pos: [0, 0], r: 60, seed: 101, arch: "standard" },
+  { id: "shallows", name: "Sunny Shallows", pos: [155, 0], r: 44, seed: 202, arch: "standard" },
+  { id: "trade", name: "Trade Routes", pos: [-150, 135], r: 50, seed: 303, arch: "mesa" },
+  { id: "opensea", name: "Open Sea", pos: [205, -165], r: 54, seed: 404, arch: "mountain" },
+  { id: "reefs", name: "Sunken Reefs", pos: [-255, -135], r: 56, seed: 505, arch: "atoll" },
+  { id: "triangle", name: "Devil's Triangle", pos: [-45, -265], r: 60, seed: 606, arch: "mountain" },
+  { id: "abyss", name: "The Abyss", pos: [335, 95], r: 66, seed: 707, arch: "mesa" },
+  { id: "skullbone", name: "Skullbone Cove", pos: [95, 250], r: 50, seed: 808, arch: "mesa" },
+  { id: "gilded", name: "Gilded Straits", pos: [-330, 65], r: 62, seed: 909, arch: "atoll" },
 ];
 
 const MODELS = {
@@ -694,7 +694,19 @@ export class PirationWorld {
       if (d > 1) return -2;
       const n = fbm((lx / r) * 1.6 + 5, (lz / r) * 1.6 + 5, seed);
       const fall = 1 - smooth(d);
-      const h = Math.pow(clamp(n * 1.4 - 0.15, 0, 1), 1.35) * r * 0.55 * fall;
+      let h = Math.pow(clamp(n * 1.4 - 0.15, 0, 1), 1.35) * r * 0.55 * fall;
+      const arch = def.arch || "standard";
+      if (arch === "mountain") {
+        h += r * 0.34 * Math.pow(1 - d, 1.15);
+        h *= 1.12;
+      } else if (arch === "atoll") {
+        h *= 0.3 + 1.3 * smoothstep(0.32, 0.8, d);
+        if (d < 0.4) h *= 0.35 + 0.65 * smoothstep(0, 0.4, d);
+      } else if (arch === "mesa") {
+        const cap = r * 0.46;
+        if (h > cap * 0.5) h = cap * 0.5 + (h - cap * 0.5) * 0.08;
+        h *= 1.08;
+      }
       return Math.round(h * 2.4) / 2.4;
     });
     const hAt = (x, z) => this.terrainHeights.get(def.id)(x, z);
