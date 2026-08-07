@@ -128,6 +128,12 @@ function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
+function prettyName(id) {
+  return String(id || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
@@ -175,6 +181,13 @@ export class PirationWorld {
     this.qualityTimer = 3;
     this.fxTex = makeRadialTexture("#ffffff", "#ffffff00");
     this.ringTex = makeRingTexture();
+    this.modelAnims = {};
+    this.banners = [];
+    this.birdFlocks = [];
+    this.islandMotes = [];
+    this.mixers = [];
+    this.footTimer = 0;
+    this.swimTimer = 0;
   }
 
   async init() {
@@ -225,6 +238,8 @@ export class PirationWorld {
     this.buildAIShips();
     this.buildShadows();
     this.buildGulls();
+    this.buildBirdFlocks();
+    this.buildIslandMotes();
     this.buildStorm();
     this.buildBuoys();
     this.bindInput();
@@ -303,6 +318,7 @@ export class PirationWorld {
     this.splashTex = makeRadialTexture("#bff7ff", "#bff7ff00");
     this.sparkTex = makeRadialTexture("#ffe28a", "#ffe28a00");
     this.smokeTex = makeRadialTexture("#9aa4b2", "#9aa4b200");
+    this.dustTex = makeRadialTexture("#ecd9ae", "#ecd9ae00");
   }
 
   // ---------- combat-in-world ----------
@@ -314,6 +330,11 @@ export class PirationWorld {
         this.scene.remove(this.battle.mesh);
         if (this.battle.playerBar) this.ship.remove(this.battle.playerBar);
         if (this.battleShadow) this.scene.remove(this.battleShadow);
+        if (this.animMob) {
+          this.animMob.stopAllAction();
+          this.mixers = this.mixers.filter((m) => m !== this.animMob);
+          this.animMob = null;
+        }
         this.battle = null;
         this.battleShadow = null;
       }
@@ -341,6 +362,23 @@ export class PirationWorld {
     this.scene.add(shadow);
     this.battle = { mesh, basePos: pos.clone(), t: 0, shake: { t: 0, dur: 0, amp: 0 } };
     this.battleShadow = shadow;
+    this.animMob = new THREE.AnimationMixer(mesh);
+    this.mixers.push(this.animMob);
+    this.battleClips = this.modelAnims[key] || [];
+    this.setClip(this.animMob, this.battleClips, "idle");
+    // spawn splash + name banner
+    this.spawnFxSprite(this.splashTex, pos.clone().setY(0.5), 5, 0.9, true);
+    this.spawnFxSprite(makeRingTexture("rgba(255,255,255,0.7)"), pos.clone().setY(0.8), 7, 1.0);
+    const tag = mobId.startsWith("boss") ? "BOSS" : mobId.endsWith("_elite") ? "ELITE" : "MONSTER";
+    const name = prettyName(mobId).replace(/_elite$/, "");
+    this.showBanner(name, {
+      at: pos,
+      color: tag === "BOSS" ? "#ff7b6b" : tag === "ELITE" ? "#ffb45e" : "#ffd166",
+      sub: tag,
+      scale: tag === "BOSS" ? 9 : 7,
+      yOffset: 7.5,
+      dur: 2.3,
+    });
     const barMat = (pct, color) =>
       new THREE.SpriteMaterial({ map: makeBarTexture(pct, color), transparent: true, depthWrite: false });
     const enemyBar = new THREE.Sprite(barMat(1, "#ff5a5a"));
@@ -368,6 +406,8 @@ export class PirationWorld {
     if (Math.abs((b.ePct ?? 1) - enemyPct) > 0.02) {
       b.ePct = enemyPct;
       if (b.enemyBar) b.enemyBar.material.map = makeBarTexture(enemyPct, "#ff5a5a");
+      if (enemyPct < (b.prevEPct ?? 1)) this.playOnce(this.animMob, "hit", 1.0);
+      b.prevEPct = enemyPct;
     }
     if (Math.abs((b.pPct ?? 1) - playerPct) > 0.02) {
       b.pPct = playerPct;
@@ -412,6 +452,7 @@ export class PirationWorld {
     } else if (kind === "enemyShield") {
       this.spawnFxSprite(this.ringTex, this.battle.mesh.position.clone().setY(2.0), 3.0, 0.55);
     } else if (kind === "enemyTelegraph") {
+      this.playOnce(this.animMob, "attack", 1.0);
       const r = makeRingTexture("rgba(255, 110, 90, 0.95)");
       this.spawnFxSprite(r, this.battle.mesh.position.clone().setY(2.0), 3.2, 0.7);
     } else if (kind === "heal") {
@@ -425,6 +466,14 @@ export class PirationWorld {
       this.battle.sink = 1;
       this.spawnFxSprite(this.splashTex, this.battle.mesh.position.clone().setY(0.5), 3.2, 0.8);
       this.spawnFxSprite(this.sparkTex, this.battle.mesh.position.clone().setY(2), 2.4, 0.7);
+      this.showBanner("VICTORY!", {
+        at: this.battle.mesh.position,
+        color: "#ffe28a",
+        sub: "Loot secured",
+        scale: 8,
+        yOffset: 8,
+        dur: 2.4,
+      });
       // confetti burst
       const rng = Math.random;
       for (let i = 0; i < 10; i++) {
@@ -440,6 +489,14 @@ export class PirationWorld {
     } else {
       this.spawnFxSprite(this.smokeTex, this.ship.position.clone().setY(1.8), 3.4, 0.9);
       this.triggerShake(0.5, 0.25);
+      this.showBanner("DEFEATED", {
+        at: this.ship.position,
+        color: "#ff6b6b",
+        sub: "The sea claims another",
+        scale: 8,
+        yOffset: 8,
+        dur: 2.4,
+      });
     }
   }
 
@@ -508,6 +565,7 @@ export class PirationWorld {
         if (p.kind === "attack") {
           this.hitStop = 0.12;
           this.triggerEnemyShake(0.3, 0.4);
+          this.playOnce(this.animMob, "hit", 1.25);
           if (p.dmg) this.spawnDamageNumber(p.dmg, p.to.clone().setY(2.6), false);
         } else {
           this.hitStop = 0.06;
@@ -697,6 +755,7 @@ export class PirationWorld {
       const scene = gltf.scene;
       normalizeModel(scene, target);
       this.models[key] = scene;
+      this.modelAnims[key] = gltf.animations || [];
     }
   }
 
@@ -1008,6 +1067,9 @@ export class PirationWorld {
     });
     this.ship.add(this.shipModel);
     }
+    this.animShip = new THREE.AnimationMixer(this.shipModel);
+    this.mixers.push(this.animShip);
+    this.setClip(this.animShip, this.modelAnims["ship_" + shipId] || this.modelAnims.ship_skiff, "idle");
     this.ship.position.set(0, 0, ISLANDS[0].r + 2);
     this.ship.rotation.y = 0;
     const flag = new THREE.Mesh(
@@ -1031,6 +1093,9 @@ export class PirationWorld {
     this.player.position.set(10, this.terrainAt(10, 6), 6);
     this.player.visible = false;
     this.scene.add(this.player);
+    this.animPlayer = new THREE.AnimationMixer(this.player);
+    this.mixers.push(this.animPlayer);
+    this.setClip(this.animPlayer, this.modelAnims.player, "01_Idle_1");
     this.mode = "sail";
   }
 
@@ -1041,6 +1106,13 @@ export class PirationWorld {
     this.shipModel = model.clone(true);
     this.shipModel.position.y = -0.4;
     this.ship.add(this.shipModel);
+    if (this.animShip) {
+      this.animShip.stopAllAction();
+      this.mixers = this.mixers.filter((m) => m !== this.animShip);
+    }
+    this.animShip = new THREE.AnimationMixer(this.shipModel);
+    this.mixers.push(this.animShip);
+    this.setClip(this.animShip, this.modelAnims["ship_" + id] || this.modelAnims.ship_skiff, "idle");
   }
 
   buildAIShips() {
@@ -1192,6 +1264,234 @@ export class PirationWorld {
       );
       const flap = 0.72 + 0.28 * Math.abs(Math.sin(t * 6 + u.phase));
       g.scale.set(1.8, 1.1 * flap, 1);
+    }
+  }
+
+  // ---------- rigged animations (CC0 clips) ----------
+
+  setClip(mixer, clips, name, { speed = 1, loop = true, fade = 0.22 } = {}) {
+    if (!mixer || !clips || !clips.length) return;
+    const clip = clips.find((c) => c.name === name) || clips[0];
+    const st = mixer.userData || (mixer.userData = { current: null, actions: new Map(), clips });
+    st.clips = clips;
+    if (st.current === clip.name) return;
+    let action = st.actions.get(clip.name);
+    if (!action) {
+      action = mixer.clipAction(clip);
+      st.actions.set(clip.name, action);
+    }
+    if (st.current) {
+      const prev = st.actions.get(st.current);
+      if (prev) prev.fadeOut(fade);
+    }
+    action.reset();
+    action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+    if (!loop) action.clampWhenFinished = true;
+    action.timeScale = speed;
+    action.fadeIn(fade);
+    action.play();
+    st.current = clip.name;
+  }
+
+  playOnce(mixer, name, speed = 1, back = null) {
+    if (!mixer || !mixer.userData?.clips) return;
+    const st = mixer.userData;
+    const clip = st.clips.find((c) => c.name === name);
+    if (!clip) return;
+    let action = st.actions.get(clip.name);
+    if (!action) {
+      action = mixer.clipAction(clip);
+      st.actions.set(clip.name, action);
+    }
+    action.reset();
+    action.setLoop(THREE.LoopOnce);
+    action.clampWhenFinished = true;
+    action.timeScale = speed;
+    action.fadeIn(0.06);
+    action.play();
+    st.once = { name: clip.name, back: back || st.current, total: clip.duration / Math.max(0.01, speed) };
+  }
+
+  updateAnimations(dt) {
+    for (const m of this.mixers) {
+      if (!m) continue;
+      m.update(dt);
+      const st = m.userData;
+      if (st?.once) {
+        const o = st.once;
+        const action = st.actions.get(o.name);
+        if (!action || action.time >= o.total - 0.03) {
+          st.once = null;
+          if (action) action.fadeOut(0.12);
+          this.setClip(m, st.clips, o.back || "idle", { fade: 0.14 });
+        }
+      }
+    }
+  }
+
+  // ---------- ambient life ----------
+
+  buildBirdFlocks() {
+    const tex = makeBirdTexture();
+    const rng = mulberry32(1337);
+    for (let f = 0; f < 3; f++) {
+      const count = 5 + (f % 2) * 2;
+      const birds = [];
+      for (let i = 0; i < count; i++) {
+        const s = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.88 }),
+        );
+        s.scale.set(2.2, 1.3, 1);
+        this.scene.add(s);
+        birds.push(s);
+      }
+      const heading = rng() * Math.PI * 2;
+      this.birdFlocks.push({
+        birds,
+        pos: new THREE.Vector3((rng() - 0.5) * 1200, 28 + rng() * 26, (rng() - 0.5) * 1200),
+        dir: new THREE.Vector3(-Math.sin(heading), 0, -Math.cos(heading)),
+        speed: 16 + rng() * 12,
+        spread: 3.4 + rng() * 1.6,
+        depth: 2.2 + rng() * 1.4,
+        phase: rng() * 10,
+        wob: 0.5 + rng() * 0.8,
+      });
+    }
+  }
+
+  updateBirdFlocks(dt) {
+    for (const fl of this.birdFlocks) {
+      fl.pos.addScaledVector(fl.dir, fl.speed * dt);
+      fl.pos.y += Math.sin(this.time * 0.3 + fl.phase) * fl.wob * dt;
+      if (Math.hypot(fl.pos.x, fl.pos.z) > WORLD_R + 140) {
+        fl.pos.multiplyScalar(-0.95);
+        fl.dir.set(-fl.dir.x, 0, -fl.dir.z);
+        fl.pos.y = 24 + Math.random() * 34;
+      }
+      const n = fl.birds.length;
+      const tangent = new THREE.Vector3(fl.dir.z, 0, -fl.dir.x);
+      for (let i = 0; i < n; i++) {
+        const bird = fl.birds[i];
+        const off = i - (n - 1) / 2;
+        const t = this.time * 0.9 + fl.phase + i * 0.22;
+        const flap = 0.72 + 0.28 * Math.abs(Math.sin(t * 7));
+        bird.position
+          .copy(fl.pos)
+          .addScaledVector(tangent, off * fl.spread)
+          .addScaledVector(fl.dir, -Math.abs(off) * fl.depth);
+        bird.position.y += Math.sin(t * 2.3 + fl.phase) * 1.1;
+        bird.scale.set(2.2, 1.3 * flap, 1);
+      }
+    }
+  }
+
+  buildIslandMotes() {
+    const butterflyTex = makeRadialTexture("#ffcf7a", "#ffcf7a00");
+    const dustTex = makeRadialTexture("#fff3c8", "#fff3c800");
+    const rng = mulberry32(2468);
+    for (const def of ISLANDS) {
+      const perIsland = def.id === "hub" ? 8 : 5;
+      for (let i = 0; i < perIsland; i++) {
+        const sparkle = rng() > 0.45;
+        const s = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: sparkle ? dustTex : butterflyTex,
+            transparent: true,
+            depthWrite: false,
+            opacity: sparkle ? 0.55 : 0.85,
+            blending: sparkle ? THREE.AdditiveBlending : THREE.NormalBlending,
+          }),
+        );
+        s.scale.set(sparkle ? 1.1 : 1.6, sparkle ? 1.1 : 1.0, 1);
+        this.scene.add(s);
+        this.islandMotes.push({
+          sprite: s,
+          sparkle,
+          island: def,
+          angle: rng() * Math.PI * 2,
+          radius: (0.35 + rng() * 0.55) * def.r,
+          height: sparkle ? 4 + rng() * 9 : 0.8 + rng() * 2.4,
+          speed: (sparkle ? 0.05 : 0.16) + rng() * 0.08,
+          bob: 0.3 + rng() * 0.7,
+          phase: rng() * 10,
+          scale: s.scale.x,
+        });
+      }
+    }
+  }
+
+  updateIslandMotes(dt) {
+    for (const m of this.islandMotes) {
+      const def = m.island;
+      m.angle += m.speed * dt;
+      const h = this.terrainAt(def.pos[0] + Math.cos(m.angle) * m.radius, def.pos[1] + Math.sin(m.angle) * m.radius);
+      const y = Math.max(h, 0.2) + m.height + Math.sin(this.time * 1.4 + m.phase) * m.bob * 0.35;
+      m.sprite.position.set(
+        def.pos[0] + Math.cos(m.angle) * m.radius,
+        y,
+        def.pos[1] + Math.sin(m.angle) * m.radius,
+      );
+      const tw = 1 + Math.sin(this.time * 3.2 + m.phase) * 0.16;
+      m.sprite.scale.set(m.scale * tw, m.scale * (m.sparkle ? 1 : 0.68) * (2 - tw), 1);
+      m.sprite.material.opacity = (m.sparkle ? 0.55 : 0.85) * (0.75 + 0.25 * Math.sin(this.time * 2.1 + m.phase));
+    }
+  }
+
+  // ---------- in-world banners ----------
+
+  showBanner(text, opts = {}) {
+    const { at = null, color = "#ffffff", sub = "", dur = 2.4, scale = 7 } = opts;
+    const pos = at
+      ? at.clone()
+      : (this.mode === "sail" ? this.ship.position.clone() : this.player.position.clone());
+    pos.y += opts.yOffset ?? (this.mode === "sail" ? 6.5 : 3.5);
+    const tex = makeTextSprite(text, color);
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0 }),
+    );
+    sprite.position.copy(pos);
+    sprite.scale.set(scale, scale * (96 / 256), 1);
+    this.scene.add(sprite);
+    const banner = { sprite, tex, t: 0, dur, sub, baseY: pos.y, fadeIn: 0.25, scale };
+    if (sub) {
+      const subTex = makeTextSprite(sub, "#f2f7ff");
+      const subSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: subTex, transparent: true, depthWrite: false, opacity: 0 }),
+      );
+      subSprite.position.copy(pos);
+      subSprite.position.y -= scale * 0.52;
+      subSprite.scale.set(scale * 0.6, scale * 0.6 * (96 / 256), 1);
+      this.scene.add(subSprite);
+      banner.subSprite = subSprite;
+      banner.subTex = subTex;
+    }
+    this.banners.push(banner);
+    return banner;
+  }
+
+  updateBanners(dt) {
+    for (let i = this.banners.length - 1; i >= 0; i--) {
+      const b = this.banners[i];
+      b.t += dt;
+      const k = Math.min(1, b.t / b.dur);
+      const fade = k < b.fadeIn ? k / b.fadeIn : 1 - Math.max(0, (k - 0.62) / 0.38);
+      b.sprite.position.y = b.baseY + k * 1.6;
+      b.sprite.material.opacity = Math.max(0, fade);
+      if (b.subSprite) {
+        b.subSprite.position.y = b.baseY - b.scale * 0.52 + k * 1.2;
+        b.subSprite.material.opacity = Math.max(0, fade * 0.95);
+      }
+      if (k >= 1) {
+        this.scene.remove(b.sprite);
+        b.sprite.material.dispose();
+        b.tex.dispose();
+        if (b.subSprite) {
+          this.scene.remove(b.subSprite);
+          b.subSprite.material.dispose();
+          b.subTex.dispose();
+        }
+        this.banners.splice(i, 1);
+      }
     }
   }
 
@@ -1458,6 +1758,9 @@ export class PirationWorld {
     this.updateSea(dt);
     this.updateClouds(dt);
     this.updateGulls(dt);
+    this.updateBirdFlocks(dt);
+    this.updateIslandMotes(dt);
+    this.updateBanners(dt);
     this.updateStorm(dt);
     this.updateBuoys(dt);
     this.updateAIShips(dt);
@@ -1465,6 +1768,7 @@ export class PirationWorld {
     this.updateAmbush(dt);
     this.updateAction();
     this.updateHUD();
+    this.updateAnimations(dt);
   }
 
   updateBattle(dt) {
@@ -1599,6 +1903,7 @@ export class PirationWorld {
 
   updateOnFoot(dt, input) {
     const p = this.player;
+    let moving = false;
     if (this.playerShadow) {
       this.playerShadow.position.set(p.position.x, 0.1, p.position.z);
     }
@@ -1612,7 +1917,8 @@ export class PirationWorld {
       const move = new THREE.Vector3();
       move.addScaledVector(fwd, -input.y);
       move.addScaledVector(right, input.x);
-      if (move.lengthSq() > 0) {
+      moving = move.lengthSq() > 0.0001;
+      if (moving) {
         move.normalize().multiplyScalar(speed * dt);
         p.position.add(move);
         const targetYaw = Math.atan2(move.x, move.z);
@@ -1621,9 +1927,26 @@ export class PirationWorld {
         while (dy < -Math.PI) dy += Math.PI * 2;
         p.rotation.y += dy * Math.min(1, dt * 8);
       }
+      // walk bob + footstep dust
+      if (moving) {
+        const stepFreq = speed > 7 ? 11 : 8;
+        p.userData.bob = Math.abs(Math.sin(this.time * stepFreq)) * (speed > 7 ? 0.18 : 0.11);
+        this.footTimer -= dt;
+        if (this.footTimer <= 0) {
+          this.footTimer = speed > 7 ? 0.18 : 0.28;
+          const foot = new THREE.Vector3(p.position.x, p.position.y - 1.0, p.position.z)
+            .addScaledVector(new THREE.Vector3(Math.sin(p.rotation.y), 0, Math.cos(p.rotation.y)), 0.4);
+          this.spawnFxSprite(this.dustTex, foot, 0.55, 0.4, false, new THREE.Vector3(0, 0.8, 0));
+        }
+      } else {
+        p.userData.bob = 0;
+      }
       const h = this.terrainAt(p.position.x, p.position.z);
       if (h > -0.2) {
         p.position.y = lerp(p.position.y, h + 1.1, Math.min(1, dt * 8));
+        p.position.y += p.userData.bob || 0;
+        p.rotation.z = lerp(p.rotation.z, moving ? Math.sin(this.time * 8) * 0.06 : 0, Math.min(1, dt * 6));
+        p.rotation.x = lerp(p.rotation.x, 0, Math.min(1, dt * 6));
       } else {
         this.mode = "swim";
       }
@@ -1637,14 +1960,43 @@ export class PirationWorld {
       const move = new THREE.Vector3();
       move.addScaledVector(fwd, -input.y);
       move.addScaledVector(right, input.x);
-      if (move.lengthSq() > 0) {
+      moving = move.lengthSq() > 0.0001;
+      if (moving) {
         move.normalize().multiplyScalar(speed * dt);
         p.position.add(move);
         p.rotation.y = Math.atan2(move.x, move.z);
       }
       p.position.y = 0.5 + Math.sin(this.time * 3.4) * 0.18;
+      p.rotation.z = Math.sin(this.time * 3.4 + 0.7) * 0.12;
+      p.rotation.x = Math.sin(this.time * 2.7) * 0.08;
+      this.swimTimer -= dt;
+      if (moving && this.swimTimer <= 0) {
+        this.swimTimer = 0.5;
+        this.spawnFxSprite(
+          makeRingTexture("rgba(180, 235, 255, 0.55)"),
+          p.position.clone().setY(0.35),
+          1.8,
+          0.6,
+          false,
+        );
+      }
       const h = this.terrainAt(p.position.x, p.position.z);
       if (h > 0.1) this.mode = "walk";
+    }
+    // rigged player clips
+    if (this.animPlayer && this.modelAnims.player.length) {
+      if (this.mode === "walk") {
+        const fast = this.keys.ShiftLeft || this.keys.ShiftRight;
+        const clip = moving ? (fast ? "05_Run" : "04_Walk") : "01_Idle_1";
+        this.setClip(this.animPlayer, this.modelAnims.player, clip, { speed: fast ? 1.1 : 0.9 });
+      } else {
+        this.setClip(
+          this.animPlayer,
+          this.modelAnims.player,
+          moving ? "31_Swimming" : "30_Treading_Water",
+          { speed: 1 },
+        );
+      }
     }
   }
 
@@ -1909,6 +2261,14 @@ export class PirationWorld {
     this.nearIsland = def;
     this.camera.position.set(def.pos[0] - 26, 14, def.pos[1] + def.r + 34);
     this.api.toast("Fair winds — " + def.name + "!");
+    this.showBanner(def.name, {
+      at: this.ship.position,
+      color: "#8ef0d0",
+      sub: "Island reached",
+      scale: 7.5,
+      yOffset: 7,
+      dur: 2.2,
+    });
   }
 
   loop() {
@@ -1974,6 +2334,11 @@ function normalizeModel(obj, target) {
 
 function smooth(x) {
   return x * x * (3 - 2 * x);
+}
+
+function smoothstep(edge0, edge1, x) {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
 }
 
 function makeRadialTexture(inner, outer) {

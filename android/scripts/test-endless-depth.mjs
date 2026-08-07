@@ -48,8 +48,8 @@ function run(captainId) {
   state.character.level = 30;
   state.character.xp = 0;
   state.character.xpToNext = 0;
-  state.shipId = "dreadnought";
-  state.shipDura = core.shipById(game, "dreadnought").hull;
+  state.shipId = "galleon";
+  state.shipDura = core.shipById(game, "galleon").hull;
   state.crew = ["a", "b", "c", "d", "e", "f"];
   state.inventory.Marks = 1000000;
   state.collection = [];
@@ -95,7 +95,7 @@ function run(captainId) {
   return end;
 }
 
-for (const cap of ["morgaine", "bones", "ironbeard", "cetus"]) {
+for (const cap of ["captainbanshee", "rustbeard", "captainhightide", "admiralironsides"]) {
   const r = run(cap);
   console.log(`${cap}: wave ${r.wave}, score ${r.score}, kills ${r.kills}, xp ${r.xp}, marks ${r.marks}`);
 }

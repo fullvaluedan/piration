@@ -763,6 +763,12 @@ function renderCombat(back) {
       sfx("level");
       buzz([40, 40, 80]);
       world?.fxEnd(true);
+      world?.showBanner?.("LEVEL UP!", {
+        color: "#ffe28a",
+        sub: `Now level ${state.character.level}`,
+        scale: 7.5,
+        dur: 2.4,
+      });
     } else {
       sfx("win");
       buzz([30, 30, 60]);
@@ -1530,6 +1536,7 @@ function initWorld() {
     },
     toast: (m) => toast(m),
     sfx: (k) => sfx(k),
+    banner: (text, opts) => world?.showBanner?.(text, opts),
     openPanel: (which) => openGamePanel(which),
     onHUD: (h) => updateWorldHUD(h),
     startAmbush: (mobId) => startWorldAmbush(mobId),
