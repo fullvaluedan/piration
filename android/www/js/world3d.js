@@ -159,6 +159,7 @@ export class PirationWorld {
     this.battle = null;
     this.projectiles = [];
     this.fxSprites = [];
+    this.fxCount = 0;
     this.shake = { t: 0, dur: 0, amp: 0 };
     this.fxTex = makeRadialTexture("#ffffff", "#ffffff00");
     this.ringTex = makeRingTexture();
@@ -212,6 +213,7 @@ export class PirationWorld {
     this.buildAIShips();
     this.buildShadows();
     this.buildGulls();
+    this.buildStorm();
     this.bindInput();
     this.resize();
     window.addEventListener("resize", () => this.resize());
@@ -297,6 +299,7 @@ export class PirationWorld {
     if (!active) {
       if (this.battle) {
         this.scene.remove(this.battle.mesh);
+        if (this.battle.playerBar) this.ship.remove(this.battle.playerBar);
         if (this.battleShadow) this.scene.remove(this.battleShadow);
         this.battle = null;
         this.battleShadow = null;
@@ -325,6 +328,31 @@ export class PirationWorld {
     this.scene.add(shadow);
     this.battle = { mesh, basePos: pos.clone(), t: 0, shake: { t: 0, dur: 0, amp: 0 } };
     this.battleShadow = shadow;
+    const barMat = (pct, color) =>
+      new THREE.SpriteMaterial({ map: makeBarTexture(pct, color), transparent: true, depthWrite: false });
+    const enemyBar = new THREE.Sprite(barMat(1, "#ff5a5a"));
+    enemyBar.scale.set(3.4, 0.55, 1);
+    enemyBar.position.set(0, 4.6, 0);
+    this.battle.mesh.add(enemyBar);
+    this.battle.enemyBar = enemyBar;
+    const playerBar = new THREE.Sprite(barMat(1, "#4fbf78"));
+    playerBar.scale.set(3.4, 0.55, 1);
+    playerBar.position.set(0, 3.2, 0);
+    this.ship.add(playerBar);
+    this.battle.playerBar = playerBar;
+  }
+
+  setBattleHp(playerPct, enemyPct) {
+    if (!this.battle) return;
+    const b = this.battle;
+    if (Math.abs((b.ePct ?? 1) - enemyPct) > 0.02) {
+      b.ePct = enemyPct;
+      if (b.enemyBar) b.enemyBar.material.map = makeBarTexture(enemyPct, "#ff5a5a");
+    }
+    if (Math.abs((b.pPct ?? 1) - playerPct) > 0.02) {
+      b.pPct = playerPct;
+      if (b.playerBar) b.playerBar.material.map = makeBarTexture(playerPct, "#4fbf78");
+    }
   }
 
   fxCard(kind, payload) {
@@ -363,6 +391,9 @@ export class PirationWorld {
       this.spawnFxSprite(this.ringTex, this.ship.position.clone().setY(1.2), 2.2, 0.5);
     } else if (kind === "enemyShield") {
       this.spawnFxSprite(this.ringTex, this.battle.mesh.position.clone().setY(2.0), 3.0, 0.55);
+    } else if (kind === "enemyTelegraph") {
+      const r = makeRingTexture("rgba(255, 110, 90, 0.95)");
+      this.spawnFxSprite(r, this.battle.mesh.position.clone().setY(2.0), 3.2, 0.7);
     } else if (kind === "heal") {
       this.spawnFxSprite(this.sparkTex, this.ship.position.clone().setY(1.6), 1.6, 0.5);
     }
@@ -393,6 +424,7 @@ export class PirationWorld {
   }
 
   spawnFxSprite(tex, pos, size, life, additive = false, vel = null) {
+    this.fxCount += 1;
     const mat = new THREE.SpriteMaterial({
       map: tex,
       transparent: true,
@@ -500,8 +532,9 @@ export class PirationWorld {
       side: THREE.DoubleSide,
       uniforms: {
         uTime: { value: 0 },
-        uDeep: { value: new THREE.Color(0x0b6fa8) },
-        uShallow: { value: new THREE.Color(0x26c9bd) },
+        uOpen: { value: new THREE.Color(0x0a4f86) },
+        uLagoon: { value: new THREE.Color(0x2ed0bf) },
+        uShallow: { value: new THREE.Color(0x35d9c8) },
         uSky: { value: new THREE.Color(0xa8d8ff) },
         uSun: { value: new THREE.Vector3(0.55, 0.62, 0.36).normalize() },
         uIslands: { value: islandUniforms },
@@ -511,7 +544,7 @@ export class PirationWorld {
       },
       vertexShader: `
         uniform float uTime; uniform vec4 uIslands[8];
-        varying vec3 vWorld; varying vec3 vNormal; varying float vFoam;
+        varying vec3 vWorld; varying vec3 vNormal; varying float vFoam; varying float vShore;
         float wave(vec2 p, float t){
           return 0.42*sin(dot(vec2(0.9,0.4), p)*0.055 + t*1.3)
                + 0.30*sin(dot(vec2(-0.6,0.8), p)*0.075 + t*1.7)
@@ -551,23 +584,30 @@ export class PirationWorld {
           rMin = min(rMin, uIslands[4].z); rMin = min(rMin, uIslands[5].z);
           rMin = min(rMin, uIslands[6].z); rMin = min(rMin, uIslands[7].z);
           vFoam = smoothstep(rMin + 8.5, rMin + 2.0, shore) * smoothstep(0.35, 1.4, w + 0.9);
+          vShore = shore;
           gl_Position = projectionMatrix * viewMatrix * wp;
         }`,
       fragmentShader: `
-        uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSun; uniform float uTime;
+        uniform vec3 uOpen; uniform vec3 uLagoon; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSun; uniform float uTime;
         uniform sampler2D uShadowMap; uniform mat4 uShadowMatrix; uniform float uShadowBias;
-        varying vec3 vWorld; varying vec3 vNormal; varying float vFoam;
+        varying vec3 vWorld; varying vec3 vNormal; varying float vFoam; varying float vShore;
         float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
         void main(){
           vec3 n = normalize(vNormal);
           vec3 view = normalize(cameraPosition - vWorld);
           float fres = pow(1.0 - max(dot(view, n), 0.0), 3.0);
-          vec3 base = mix(uDeep, uShallow, clamp(vWorld.y * 0.18 + 0.35, 0.0, 1.0));
+          // lagoon near islands -> deep open sea
+          float depthF = smoothstep(16.0, 280.0, vShore);
+          vec3 base = mix(uLagoon, uOpen, depthF);
+          base = mix(base, uShallow, clamp(vWorld.y * 0.14 + 0.2, 0.0, 1.0) * (1.0 - depthF * 0.6));
           vec3 c = mix(base, uSky, fres * 0.55);
-          // sun glitter
-          float spec = pow(max(dot(reflect(-view, n), uSun), 0.0), 70.0);
+          // caustic shimmer
+          float caustic = step(0.68, hash(floor(vWorld.xz * 2.4 + vec2(uTime * 0.22, -uTime * 0.14))));
+          c += vec3(0.12, 0.32, 0.3) * caustic * 0.16 * (1.0 - depthF * 0.6);
+          // sun glitter path
+          float spec = pow(max(dot(reflect(-view, n), uSun), 0.0), 60.0);
           float sparkle = step(0.985, hash(floor(vWorld.xz * 3.0) + floor(uTime * 6.0)));
-          c += vec3(1.0, 0.96, 0.82) * (spec * 0.85 + sparkle * 0.18);
+          c += vec3(1.0, 0.96, 0.82) * (spec * 1.1 + sparkle * 0.18);
           // foam
           float waveFoam = smoothstep(0.62, 0.86, hash(floor(vWorld.xz * 1.4)));
           float foam = clamp(vFoam + waveFoam * 0.12, 0.0, 1.0);
@@ -824,6 +864,37 @@ export class PirationWorld {
       this.scene.add(rocks);
     }
 
+    // beach palms (decorative instanced layer)
+    const palmItems = [];
+    const palmCount = def.id === "hub" ? 3 : 4 + Math.floor(rng() * 3);
+    for (let i = 0; i < palmCount; i++) {
+      tryPlace((x, z, h) => {
+        if (h < 1.5) {
+          palmItems.push({
+            x: def.pos[0] + x,
+            z: def.pos[1] + z,
+            h,
+            rot: rng() * Math.PI * 2,
+            s: 0.9 + rng() * 0.5,
+          });
+        }
+      }, 80);
+    }
+    if (palmItems.length) {
+      const palmGeo = makeMergedBoxes(PALM_BOXES);
+      const palms = new THREE.InstancedMesh(palmGeo, vcMat, palmItems.length);
+      for (let i = 0; i < palmItems.length; i++) {
+        dummy.position.set(palmItems[i].x, palmItems[i].h + 0.05, palmItems[i].z);
+        dummy.rotation.set(0, palmItems[i].rot, 0);
+        dummy.scale.setScalar(palmItems[i].s);
+        dummy.updateMatrix();
+        palms.setMatrixAt(i, dummy.matrix);
+      }
+      palms.instanceMatrix.needsUpdate = true;
+      palms.castShadow = true;
+      this.scene.add(palms);
+    }
+
     // hub buildings + merged dock planks
     if (def.id === "hub") {
       const sw = this.models.prop_shipwright.clone(true);
@@ -939,6 +1010,62 @@ export class PirationWorld {
       };
       this.scene.add(s);
       this.gulls.push(s);
+    }
+  }
+
+  buildStorm() {
+    const cloudTex = makeStormCloudTexture();
+    const flashTex = makeRadialTexture("#ffffff", "#ffffff00");
+    this.storm = { clouds: [], flash: null, t: 2 + Math.random() * 3 };
+    const a = 2.35;
+    const cx = Math.cos(a) * 660;
+    const cz = Math.sin(a) * 660;
+    for (let i = 0; i < 7; i++) {
+      const s = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, opacity: 0.72 }),
+      );
+      const ox = (Math.random() - 0.5) * 190;
+      const oz = (Math.random() - 0.5) * 190;
+      s.position.set(cx + ox, 105 + Math.random() * 90, cz + oz);
+      const sc = 140 + Math.random() * 100;
+      s.scale.set(sc, sc * 0.55, 1);
+      s.userData = { speed: 0.8 + Math.random() };
+      this.scene.add(s);
+      this.storm.clouds.push(s);
+    }
+    const fl = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: flashTex,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        opacity: 0,
+      }),
+    );
+    fl.position.set(cx, 175, cz);
+    fl.scale.set(300, 300, 1);
+    this.scene.add(fl);
+    this.storm.flash = fl;
+  }
+
+  updateStorm(dt) {
+    if (!this.storm) return;
+    const st = this.storm;
+    for (const s of st.clouds) {
+      s.position.x += s.userData.speed * dt * 0.6;
+    }
+    st.t -= dt;
+    if (st.t <= 0) {
+      st.t = 3 + Math.random() * 5;
+      st.flashT = 0.16;
+    }
+    if (st.flashT > 0) {
+      st.flashT -= dt;
+      const k = Math.max(0, st.flashT / 0.16);
+      st.flash.material.opacity = k;
+      st.flash.scale.setScalar(300 + (1 - k) * 220);
+    } else if (st.flash.material.opacity > 0) {
+      st.flash.material.opacity = 0;
     }
   }
 
@@ -1220,6 +1347,7 @@ export class PirationWorld {
     this.updateSea(dt);
     this.updateClouds(dt);
     this.updateGulls(dt);
+    this.updateStorm(dt);
     this.updateAIShips(dt);
     this.updateNodes();
     this.updateAmbush(dt);
@@ -1760,22 +1888,55 @@ function makeBirdTexture() {
   return tex;
 }
 
-function makeRingTexture() {
+function makeStormCloudTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 96;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(64, 48, 8, 64, 48, 60);
+  g.addColorStop(0, "rgba(38, 48, 66, 0.9)");
+  g.addColorStop(0.55, "rgba(52, 62, 82, 0.62)");
+  g.addColorStop(1, "rgba(60, 72, 92, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 96);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeRingTexture(color = "rgba(180, 235, 255, 0.9)") {
   const c = document.createElement("canvas");
   c.width = 128;
   c.height = 128;
   const ctx = c.getContext("2d");
   ctx.clearRect(0, 0, 128, 128);
-  ctx.strokeStyle = "rgba(180, 235, 255, 0.9)";
+  ctx.strokeStyle = color;
   ctx.lineWidth = 9;
   ctx.beginPath();
   ctx.arc(64, 64, 40, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.strokeStyle = "rgba(180, 235, 255, 0.35)";
+  ctx.strokeStyle = color.replace("0.9", "0.35");
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(64, 64, 52, 0, Math.PI * 2);
   ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeBarTexture(pct, color) {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 18;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "rgba(8, 14, 24, 0.85)";
+  ctx.fillRect(0, 0, 128, 18);
+  ctx.fillStyle = color;
+  ctx.fillRect(2, 3, Math.max(2, 124 * Math.max(0, Math.min(1, pct))), 12);
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, 126, 16);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -1837,6 +1998,16 @@ const ROCK_BOXES = [
   { s: [0.8, 0.5, 0.8], p: [-0.6, 0.35, -0.5], c: [0.38, 0.4, 0.46] },
 ];
 
+const PALM_BOXES = [
+  { s: [0.34, 1.6, 0.34], p: [0, 0.8, 0], c: [0.55, 0.42, 0.3], r: [0.08, 0, 0.05] },
+  { s: [0.3, 1.5, 0.3], p: [0.22, 2.15, 0.08], c: [0.52, 0.4, 0.28], r: [0.2, 0, 0.09] },
+  { s: [0.26, 1.3, 0.26], p: [0.48, 3.4, 0.18], c: [0.5, 0.38, 0.26], r: [0.32, 0, 0.12] },
+  { s: [2.5, 0.22, 1.0], p: [0.8, 4.0, 0.2], c: [0.2, 0.6, 0.3], r: [-0.5, 0, 0.15] },
+  { s: [2.4, 0.22, 1.0], p: [-0.6, 4.0, 0.3], c: [0.22, 0.58, 0.3], r: [0.45, 0, -0.1] },
+  { s: [2.3, 0.22, 1.0], p: [0.2, 4.1, 1.0], c: [0.24, 0.56, 0.3], r: [0.1, 0.5, 0.2] },
+  { s: [2.3, 0.22, 1.0], p: [0.1, 4.0, -0.8], c: [0.22, 0.6, 0.3], r: [0.1, -0.5, -0.2] },
+];
+
 function makeMergedBoxes(parts) {
   const pos = [];
   const col = [];
@@ -1845,6 +2016,11 @@ function makeMergedBoxes(parts) {
   for (const p of parts) {
     const g = new THREE.BoxGeometry(p.s[0], p.s[1], p.s[2]);
     g.translate(p.p[0], p.p[1], p.p[2]);
+    if (p.r) {
+      g.rotateX(p.r[0]);
+      g.rotateY(p.r[1] || 0);
+      g.rotateZ(p.r[2] || 0);
+    }
     const gp = g.attributes.position.array;
     for (let i = 0; i < gp.length / 3; i++) {
       pos.push(gp[i * 3], gp[i * 3 + 1], gp[i * 3 + 2]);

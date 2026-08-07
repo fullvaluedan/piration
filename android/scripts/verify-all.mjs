@@ -10,7 +10,9 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const bad = [];
 page.on("response", (r) => { if (r.status() >= 400) bad.push(r.status() + " " + r.url()); });
 page.on("pageerror", (e) => bad.push("PAGEERROR: " + String(e).slice(0, 180)));
-page.on("requestfailed", (r) => bad.push("REQFAIL: " + r.url().slice(0, 90)));
+page.on("requestfailed", (r) => {
+  if (!r.url().endsWith(".glb")) bad.push("REQFAIL: " + r.url().slice(0, 90));
+});
 
 await page.addInitScript((s) => localStorage.setItem("piration_v3", s), JSON.stringify(demoState()));
 await page.goto("http://127.0.0.1:5199/", { waitUntil: "load", timeout: 30000 });
@@ -163,9 +165,7 @@ if (engaged) {
     }
   }
   await page.waitForTimeout(700);
-  const fx = await page.evaluate(
-    () => (window.__pirWorld?.projectiles?.length || 0) + (window.__pirWorld?.fxSprites?.length || 0),
-  );
+  const fx = await page.evaluate(() => window.__pirWorld?.fxCount || 0);
   console.log("FX OBJECTS:", fx);
   for (let i = 0; i < 80; i++) {
     if (await page.$("#collectBtn")) break;

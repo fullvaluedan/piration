@@ -697,10 +697,12 @@ function renderCombat(back) {
   bind("#endTurn", () => {
     sfx("hit");
     const wasBrace = state.combat?.enemy?.intent === "brace";
+    const wasAttack = state.combat?.enemy?.intent === "attack" || state.combat?.enemy?.intent === "charge";
     const enemyDmg = state.combat?.enemy?.dmg || 0;
-    core.endTurn(state, CARDS, CARDS.game);
     if (wasBrace) world?.fxCard("enemyShield");
-    else world?.fxCard("enemyAttack", { dmg: enemyDmg });
+    else if (wasAttack) world?.fxCard("enemyTelegraph");
+    core.endTurn(state, CARDS, CARDS.game);
+    if (!wasBrace) world?.fxCard("enemyAttack", { dmg: enemyDmg });
     save();
     render();
   });
@@ -748,6 +750,7 @@ function renderCombat(back) {
     save();
     render();
   });
+  world?.setBattleHp(c.playerHp / c.playerMaxHp, c.enemy.hp / c.enemy.maxHp);
 }
 
 // ---------- endless ----------
