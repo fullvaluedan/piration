@@ -1,4 +1,4 @@
-name: Deploy docs to GitHub Pages
+name: Deploy Piration to GitHub Pages
 
 on:
   push:
@@ -23,8 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stage docs and game
+        shell: bash
+        run: |
+          mkdir -p _site/docs _site/game
+          cp -r docs/* _site/docs/
+          cp -r android/www/* _site/game/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
