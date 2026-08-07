@@ -509,6 +509,7 @@ function renderVoyageResult(result) {
     core.returnToPort(state);
     uiPending = null;
     sfx("tap");
+    world?.setBattle(false);
     if (world) closeGamePanel();
     after();
   });
@@ -633,6 +634,8 @@ function renderCombat(back) {
   content().innerHTML = html;
   content().querySelectorAll("[data-hand]").forEach((b) =>
     b.addEventListener("click", () => {
+      const id = state.combat?.hand?.[+b.dataset.hand];
+      const base = id ? CARDS.byId[id] : null;
       const r = core.playCard(state, CARDS, CARDS.game, +b.dataset.hand);
       if (!r.ok) {
         sfx("error");
@@ -640,6 +643,9 @@ function renderCombat(back) {
       } else {
         sfx("card");
         buzz(8);
+        if (base?.damage > 0) world?.fxCard("attack");
+        else if (base?.shield > 0) world?.fxCard("shield");
+        else if (base?.heal > 0) world?.fxCard("heal");
       }
       save();
       render();
@@ -648,6 +654,7 @@ function renderCombat(back) {
   bind("#endTurn", () => {
     sfx("hit");
     core.endTurn(state, CARDS, CARDS.game);
+    world?.fxCard("enemyAttack");
     save();
     render();
   });
@@ -660,6 +667,7 @@ function renderCombat(back) {
       onConfirm: () => {
         const r = core.retreatFromCombat(state, CARDS, CARDS.game);
         if (!r.ok) return toast(r.reason);
+        world?.setBattle(false);
         sfx("lose");
         toast("Retreated");
         uiPending = null;
@@ -677,14 +685,20 @@ function renderCombat(back) {
     if (uiPending?.kind === "voyage_defeat" || uiPending?.kind === "endless_end") {
       sfx("lose");
       buzz([80, 60, 120]);
+      world?.fxEnd(false);
     } else if (uiPending?.levels) {
       sfx("level");
       buzz([40, 40, 80]);
+      world?.fxEnd(true);
     } else {
       sfx("win");
       buzz([30, 30, 60]);
+      world?.fxEnd(true);
     }
     sfx("coin");
+    if (!state.combat && uiPending?.kind?.startsWith("voyage_")) {
+      setTimeout(() => world?.setBattle(false), 900);
+    }
     save();
     render();
   });
@@ -1049,6 +1063,7 @@ function renderCollection() {
         <button class="btn mini ghost" id="debugCaps">Unlock captains</button>
         <button class="btn mini ghost" id="debugJumpHub">Sail home</button>
         <button class="btn mini ghost" id="debugJumpAbyss">Sail to Abyss</button>
+        <button class="btn mini ghost" id="debugJumpGilded">Sail to Gilded</button>
       </div>
     </div>
     <div class="section"><h2>Ledger</h2>
@@ -1201,6 +1216,10 @@ function renderCollection() {
   });
   bind("#debugJumpAbyss", () => {
     world?.jumpTo("abyss");
+    closeGamePanel();
+  });
+  bind("#debugJumpGilded", () => {
+    world?.jumpTo("gilded");
     closeGamePanel();
   });
 }
@@ -1398,6 +1417,7 @@ function startWorldAmbush(mobId) {
     return toast(r.reason);
   }
   sfx("start");
+  world?.setBattle(true, mobId);
   openGamePanel("voyage");
 }
 

@@ -279,11 +279,10 @@ for (const [k, path] of Object.entries(sfxMap)) {
 // ---------- 3D models (self-contained glTF) ----------
 const modelDefs = [
   ["player", "Founder's Pirate NFT/model3d/1.gltf"],
-  ["ship_skiff", "Voxel Game Assets/ships/Gothic Ships/item_2x2_pirateskiffgothic/VE/item_2x2_pirateskiffgothic.gltf"],
-  ["ship_sloop", "Voxel Game Assets/ships/Gothic Ships/item_4x8_piratesloopgothic/VE/item_4x8_piratesloopgothic.gltf"],
-  ["ship_brig", "Voxel Game Assets/ships/Gothic Ships/item_5x12_piratemaraudergothic/VE/item_5x12_piratemaraudergothic.gltf"],
-  ["ship_galleon", "Voxel Game Assets/ships/Gothic Ships/item_4x8_pirategaellongothic/VE/item_4x8_pirategaellongothic.gltf"],
-  ["ship_dreadnought", "Voxel Game Assets/ships/Gothic Ships/item_5x10_piratefrigategothic/VE/item_5x10_piratefrigategothic.gltf"],
+  ["ship_skiff", "Voxel Game Assets/ships/Black Friday Anniversary Ship Skins/item_2x2_pirateskiffblackfriday/VE/item_2x2_pirateskiffblackfriday.gltf"],
+  ["ship_sloop", "Voxel Game Assets/ships/Black Friday Anniversary Ship Skins/item_4x8_piratesloopblackfriday/VE/item_4x8_piratesloopblackfriday.gltf"],
+  ["ship_frigate", "Voxel Game Assets/ships/Black Friday Anniversary Ship Skins/item_5x10_piratefrigateblackfriday/VE/item_5x10_piratefrigateblackfriday.gltf"],
+  ["ship_galleon", "Voxel Game Assets/ships/Black Friday Anniversary Ship Skins/item_4x8_pirategaellonblackfriday/VE/item_4x8_pirategaellonblackfriday.gltf"],
   ["mob_anglerfish", "Voxel Game Assets/Mob Enemies /Anglerfish/Anglerfish Water /model.gltf"],
   ["mob_deepone", "Voxel Game Assets/Mob Enemies /Deep One/deepone/Deep One Neutral Common/model.gltf"],
   ["mob_charybdis", "Voxel Game Assets/Mob Enemies /Charybdis/mob_6x6_charybdis/VE/Optimized/model.gltf"],

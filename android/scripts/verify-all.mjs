@@ -63,7 +63,7 @@ for (let i = 0; i < 6; i++) {
 }
 await page.waitForTimeout(600);
 step("combat");
-for (let i = 0; i < 40; i++) {
+for (let i = 0; i < 80; i++) {
   if (await page.$("#collectBtn")) break;
   const card = await page.$("[data-hand]:not(.disabled)");
   if (card) {
@@ -77,6 +77,14 @@ for (let i = 0; i < 40; i++) {
 }
 const combatEnded = await page.evaluate(() => !!document.getElementById("collectBtn"));
 console.log("COMBAT ENDED:", combatEnded);
+if (!combatEnded) {
+  await page.click("#retreatBtn", { timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  await page.click("#modalActions .btn:last-child", { timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  await page.click("#dockBtn", { timeout: 3000 }).catch(() => {});
+  await page.waitForTimeout(400);
+}
 await page.click("#collectBtn", { timeout: 4000 }).catch(() => {});
 await page.waitForTimeout(400);
 await page.click("#dockBtn", { timeout: 4000 }).catch(() => {});
@@ -112,6 +120,69 @@ if (buildBtnVisible) {
   await page.click("#buildUndo", { timeout: 4000 });
   await page.waitForTimeout(300);
   await page.click("#buildClose", { timeout: 4000 });
+}
+
+// combat-in-world ambush
+step("ambush fx");
+await page.click("#menuBtn", { timeout: 4000 }).catch(() => {});
+await page.click('button[data-tab="collection"]', { timeout: 4000 }).catch(() => {});
+await page.click("#debugJumpGilded", { timeout: 4000 }).catch(() => {});
+await page.waitForTimeout(700);
+await page.evaluate(() => {
+  const w = window.__pirWorld;
+  w.mode = "sail";
+  w.player.visible = false;
+  w.ship.position.set(0, 0, 350);
+  w.ambushTimer = 0.1;
+});
+await page.waitForTimeout(1500);
+const spawned = await page.evaluate(() => !!window.__pirWorld?.ambush);
+console.log("AMBUSH SPAWNED:", spawned);
+let engaged = spawned;
+if (spawned) {
+  await page.evaluate(() => {
+    const w = window.__pirWorld;
+    w.ambush.mesh.position.copy(w.ship.position);
+    w.ambush.mesh.position.z -= 6;
+  });
+  await page.waitForTimeout(2500);
+  engaged = await page.evaluate(() => !!window.__pirWorld?.battle);
+}
+console.log("AMBUSH ENGAGED:", engaged);
+if (engaged) {
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: "store-assets/screenshots/0-battle-world.png" });
+  for (let i = 0; i < 10; i++) {
+    const card = await page.$("[data-hand]:not(.disabled)");
+    if (card) {
+      await page.click("[data-hand]:not(.disabled)", { timeout: 1500 }).catch(() => {});
+      break;
+    }
+    if (await page.$("#endTurn")) {
+      await page.click("#endTurn", { timeout: 1500 }).catch(() => {});
+    }
+  }
+  await page.waitForTimeout(700);
+  const fx = await page.evaluate(
+    () => (window.__pirWorld?.projectiles?.length || 0) + (window.__pirWorld?.fxSprites?.length || 0),
+  );
+  console.log("FX OBJECTS:", fx);
+  for (let i = 0; i < 80; i++) {
+    if (await page.$("#collectBtn")) break;
+    const c = await page.$("[data-hand]:not(.disabled)");
+    if (c) {
+      await page.click("[data-hand]:not(.disabled)", { timeout: 1200 }).catch(() => {});
+      await page.waitForTimeout(80);
+      continue;
+    }
+    if (!(await page.$("#endTurn"))) break;
+    await page.click("#endTurn", { timeout: 1200 }).catch(() => {});
+    await page.waitForTimeout(120);
+  }
+  await page.click("#collectBtn", { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(1200);
+  const battleEnded = await page.evaluate(() => !window.__pirWorld?.battle);
+  console.log("BATTLE ENDED:", battleEnded);
 }
 
 console.log(bad.length ? "ISSUES:\n" + bad.join("\n") : "ALL CLEAN");

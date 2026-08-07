@@ -7,7 +7,7 @@ import { GLTFLoader } from "../vendor/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "../vendor/meshopt_decoder.module.js";
 
 const WATER_Y = 0;
-const WORLD_R = 430;
+const WORLD_R = 520;
 
 const ISLANDS = [
   { id: "hub", name: "Parrot's Perch", pos: [0, 0], r: 60, seed: 101 },
@@ -25,7 +25,7 @@ const MODELS = {
   player: "player",
   ship_skiff: "ship_skiff",
   ship_sloop: "ship_sloop",
-  ship_frigate: "ship_brig",
+  ship_frigate: "ship_frigate",
   ship_galleon: "ship_galleon",
   mob_anglerfish: "mob_anglerfish",
   mob_deepone: "mob_deepone",
@@ -39,6 +39,11 @@ const MODELS = {
 
 const MOB_MODELS = ["mob_anglerfish", "mob_deepone", "mob_charybdis"];
 const MOB_IDS = ["guppy_raider", "reef_horror", "abyssal_tender"];
+const MOB_MODEL_BY_ID = {
+  guppy_raider: "mob_anglerfish",
+  reef_horror: "mob_deepone",
+  abyssal_tender: "mob_charybdis",
+};
 
 // ---------- helpers ----------
 
@@ -124,6 +129,13 @@ export class PirationWorld {
     this.buildGhost = null;
     this.buildings = (this.api.getBuildings?.() || []).slice();
     this.buildingMeshes = [];
+    this.nodeInstances = {};
+    this.battle = null;
+    this.projectiles = [];
+    this.fxSprites = [];
+    this.shake = { t: 0, dur: 0, amp: 0 };
+    this.fxTex = makeRadialTexture("#ffffff", "#ffffff00");
+    this.ringTex = makeRingTexture();
   }
 
   async init() {
@@ -143,6 +155,7 @@ export class PirationWorld {
     this.scene.add(sun);
 
     this.buildSky();
+    this.buildFxTextures();
     this.buildSea();
     await this.loadModels();
     this.buildIslands();
@@ -152,6 +165,7 @@ export class PirationWorld {
     this.bindInput();
     this.resize();
     window.addEventListener("resize", () => this.resize());
+    window.__pirWorld = this; // dev/perf hook
     this.loop();
   }
 
@@ -188,7 +202,7 @@ export class PirationWorld {
     const cloudTex = makeCloudTexture();
     this.clouds = [];
     const rng = mulberry32(77);
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 6; i++) {
       const sp = new THREE.Sprite(
         new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.62 + rng() * 0.28, depthWrite: false }),
       );
@@ -200,6 +214,139 @@ export class PirationWorld {
       sp.userData.speed = 2 + rng() * 4;
       this.scene.add(sp);
       this.clouds.push(sp);
+    }
+  }
+
+  buildFxTextures() {
+    this.splashTex = makeRadialTexture("#bff7ff", "#bff7ff00");
+    this.sparkTex = makeRadialTexture("#ffe28a", "#ffe28a00");
+    this.smokeTex = makeRadialTexture("#9aa4b2", "#9aa4b200");
+  }
+
+  // ---------- combat-in-world ----------
+
+  setBattle(active, mobId) {
+    if (active && this.battle) return;
+    if (!active) {
+      if (this.battle) {
+        this.scene.remove(this.battle.mesh);
+        this.battle = null;
+      }
+      return;
+    }
+    const key = MOB_MODEL_BY_ID[mobId] || "mob_anglerfish";
+    const model = this.models[key];
+    if (!model) return;
+    const mesh = model.clone(true);
+    const fwd = new THREE.Vector3(-Math.sin(this.ship.rotation.y), 0, -Math.cos(this.ship.rotation.y));
+    const pos = this.ship.position.clone().addScaledVector(fwd, 15);
+    pos.y = 0.2;
+    mesh.position.copy(pos);
+    mesh.scale.multiplyScalar(1.25);
+    mesh.rotation.y = Math.atan2(this.ship.position.x - pos.x, this.ship.position.z - pos.z);
+    this.scene.add(mesh);
+    this.battle = { mesh, basePos: pos.clone(), t: 0, shake: { t: 0, dur: 0, amp: 0 } };
+  }
+
+  fxCard(kind) {
+    if (!this.battle) return;
+    if (kind === "attack" || kind === "enemyAttack") {
+      const from = kind === "attack" ? this.ship.position : this.battle.mesh.position;
+      const to = kind === "attack" ? this.battle.mesh.position : this.ship.position;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.28, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x1a1a1a }),
+      );
+      mesh.position.copy(from);
+      mesh.position.y += 1.2;
+      this.scene.add(mesh);
+      this.projectiles.push({
+        mesh,
+        from: mesh.position.clone(),
+        to: new THREE.Vector3(to.x, 0.6, to.z),
+        t: 0,
+        dur: 0.38,
+        kind,
+      });
+      this.spawnFxSprite(this.splashTex, from.clone(), 1.4, 0.25, true);
+    } else if (kind === "shield") {
+      this.spawnFxSprite(this.ringTex, this.ship.position.clone().setY(1.2), 2.2, 0.5);
+    } else if (kind === "heal") {
+      this.spawnFxSprite(this.sparkTex, this.ship.position.clone().setY(1.6), 1.6, 0.5);
+    }
+  }
+
+  fxEnd(won) {
+    if (!this.battle) return;
+    if (won) {
+      this.spawnFxSprite(this.splashTex, this.battle.mesh.position.clone().setY(0.5), 3.2, 0.8);
+      this.spawnFxSprite(this.sparkTex, this.battle.mesh.position.clone().setY(2), 2.4, 0.7);
+    } else {
+      this.spawnFxSprite(this.smokeTex, this.ship.position.clone().setY(1.8), 3.4, 0.9);
+      this.triggerShake(0.5, 0.25);
+    }
+  }
+
+  spawnFxSprite(tex, pos, size, life, additive = false) {
+    const mat = new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+    });
+    const s = new THREE.Sprite(mat);
+    s.position.copy(pos);
+    s.scale.set(size, size, 1);
+    this.scene.add(s);
+    this.fxSprites.push({ sprite: s, life, t: 0, max: life });
+  }
+
+  triggerShake(amp, dur) {
+    this.shake = { t: 0, dur, amp };
+  }
+
+  triggerEnemyShake(amp, dur) {
+    if (this.battle) this.battle.shake = { t: 0, dur, amp };
+  }
+
+  updateFx(dt) {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      p.t += dt;
+      const k = Math.min(1, p.t / p.dur);
+      p.mesh.position.lerpVectors(p.from, p.to, k);
+      p.mesh.position.y += Math.sin(k * Math.PI) * 1.6;
+      if (k >= 1) {
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+        this.spawnFxSprite(this.splashTex, p.to, 2.2, 0.45, true);
+        if (p.kind === "attack") this.triggerEnemyShake(0.22, 0.35);
+        else this.triggerShake(0.18, 0.35);
+      }
+    }
+    for (let i = this.fxSprites.length - 1; i >= 0; i--) {
+      const f = this.fxSprites[i];
+      f.t += dt;
+      const k = Math.min(1, f.t / f.max);
+      f.sprite.material.opacity = 1 - k;
+      f.sprite.scale.setScalar(f.sprite.scale.x + dt * 2.4);
+      if (k >= 1) {
+        this.scene.remove(f.sprite);
+        f.sprite.material.dispose();
+        this.fxSprites.splice(i, 1);
+      }
+    }
+    if (this.shake.dur > 0) {
+      this.shake.t += dt;
+      if (this.shake.t >= this.shake.dur) this.shake.dur = 0;
+    }
+    if (this.battle) {
+      this.battle.t += dt;
+      const s = this.battle.shake;
+      if (s.dur > 0) {
+        s.t += dt;
+        if (s.t >= s.dur) s.dur = 0;
+      }
     }
   }
 
@@ -368,53 +515,74 @@ export class PirationWorld {
       }
       return false;
     };
-    const addNode = (kind, lx, lz, h, mesh, scale) => {
-      const node = new THREE.Group();
-      const m = mesh.clone(true);
-      m.scale.setScalar(scale);
-      node.add(m);
-      node.position.set(def.pos[0] + lx, h, def.pos[1] + lz);
-      node.userData = { kind, respawnAt: 0, baseY: h };
-      this.scene.add(node);
-      this.nodes.push(node);
+    const rec = {
+      wood: { items: [], mesh: null },
+      cotton: { items: [], mesh: null },
+      iron: { items: [], mesh: null },
+      gold: { items: [], mesh: null },
     };
-    const treeCount = def.id === "hub" ? 4 : 10 + Math.floor(rng() * 6);
-    const cottonCount = def.id === "hub" ? 2 : 5 + Math.floor(rng() * 3);
-    const ironCount = def.id === "hub" ? 2 : 4 + Math.floor(rng() * 2);
+    this.nodeInstances[def.id] = rec;
+    const place = (kind, count) => {
+      for (let i = 0; i < count; i++) {
+        tryPlace((x, z, h) => {
+          rec[kind].items.push({
+            x: def.pos[0] + x,
+            z: def.pos[1] + z,
+            h,
+            rot: rng() * Math.PI * 2,
+            alive: true,
+            respawnAt: 0,
+          });
+        });
+      }
+    };
+    const treeCount = def.id === "hub" ? 4 : 8 + Math.floor(rng() * 4);
+    const cottonCount = def.id === "hub" ? 2 : 4 + Math.floor(rng() * 2);
+    const ironCount = def.id === "hub" ? 2 : 3 + Math.floor(rng() * 2);
     const goldCount = def.id === "hub" ? 2 : 2 + Math.floor(rng() * 2);
-    for (let i = 0; i < treeCount; i++) {
-      tryPlace((x, z, h) => addNode("wood", x, z, h, makeVoxelTree(rng), 1));
-    }
-    for (let i = 0; i < cottonCount; i++) {
-      tryPlace((x, z, h) => addNode("cotton", x, z, h, this.models.prop_cotton, 1));
-    }
-    for (let i = 0; i < ironCount; i++) {
-      tryPlace((x, z, h) => addNode("iron", x, z, h, this.models.prop_iron, 1));
-    }
-    for (let i = 0; i < goldCount; i++) {
-      tryPlace((x, z, h) => addNode("gold", x, z, h, makeGoldStack(rng), 1));
-    }
-    // hub buildings
+    place("wood", treeCount);
+    place("cotton", cottonCount);
+    place("iron", ironCount);
+    place("gold", goldCount);
+
+    const dummy = new THREE.Object3D();
+    const treeGeo = makeMergedBoxes(TREE_BOXES);
+    const goldGeo = makeMergedBoxes(GOLD_BOXES);
+    const vcMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const makeInst = (kind, geo, mat) => {
+      const items = rec[kind].items;
+      const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, items.length));
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      for (let i = 0; i < items.length; i++) {
+        dummy.position.set(items[i].x, items[i].h, items[i].z);
+        dummy.rotation.set(0, items[i].rot, 0);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      this.scene.add(mesh);
+      rec[kind].mesh = mesh;
+    };
+    makeInst("wood", treeGeo, vcMat);
+    const cottonMesh = this.models.prop_cotton?.children?.[0];
+    makeInst("cotton", cottonMesh?.geometry || goldGeo, cottonMesh?.material || vcMat);
+    const ironMesh = this.models.prop_iron?.children?.[0];
+    makeInst("iron", ironMesh?.geometry || goldGeo, ironMesh?.material || vcMat);
+    makeInst("gold", goldGeo, vcMat);
+
+    // hub buildings + merged dock planks
     if (def.id === "hub") {
       const sw = this.models.prop_shipwright.clone(true);
       sw.position.set(16, hAt(16, 12), 12);
       sw.rotation.y = 0.6;
       island.add(sw);
-      const chest = this.models.prop_chest.clone(true);
-      chest.scale.setScalar(1.2);
-      chest.position.set(-12, hAt(-12, 8), 8);
-      island.add(chest);
-      const tree = this.models.prop_tree.clone(true);
-      tree.position.set(-20, hAt(-20, -14), -14);
-      tree.rotation.y = 1.2;
-      island.add(tree);
-      // dock planks
-      const plankMat = new THREE.MeshLambertMaterial({ color: 0xb98d5a });
+      const planks = [];
       for (let i = 0; i < 5; i++) {
-        const plank = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.18, 7), plankMat);
-        plank.position.set(0, 0.12, def.r - 4 - i * 6);
-        island.add(plank);
+        planks.push({ s: [2.2, 0.18, 7], p: [0, 0.12, def.r - 4 - i * 6], c: [0.72, 0.55, 0.35] });
       }
+      const plankGeo = makeMergedBoxes(planks);
+      island.add(new THREE.Mesh(plankGeo, new THREE.MeshLambertMaterial({ vertexColors: true })));
     }
   }
 
@@ -456,16 +624,19 @@ export class PirationWorld {
     const names = ["ship_skiff", "ship_sloop", "ship_galleon"];
     const rng = mulberry32(909);
     for (let i = 0; i < 3; i++) {
-      const g = new THREE.Group();
-      const m = this.models[names[i]].clone(true);
-      m.scale.setScalar(0.75);
-      m.position.y = -0.35;
-      g.add(m);
+      const tex = new THREE.TextureLoader().load(
+        "assets/ships/" + names[i].replace("ship_", "") + ".webp",
+      );
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const sp = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
+      );
+      sp.scale.set(9, 5, 1);
       const a = rng() * Math.PI * 2;
-      g.position.set(Math.cos(a) * 260, 0, Math.sin(a) * 260);
-      g.userData = { target: ISLANDS[1 + i % 6], speed: 5 + rng() * 3, t: rng() * 10 };
-      this.scene.add(g);
-      this.aiShips.push(g);
+      sp.position.set(Math.cos(a) * 260, 0.4, Math.sin(a) * 260);
+      sp.userData = { target: ISLANDS[1 + i % 6], speed: 5 + rng() * 3, t: rng() * 10 };
+      this.scene.add(sp);
+      this.aiShips.push(sp);
     }
   }
 
@@ -668,10 +839,10 @@ export class PirationWorld {
     }
     const gains = { wood: "Wood", cotton: "Cotton", iron: "Iron", gold: "GoldNugget" };
     const amt = 1 + Math.floor(Math.random() * 3);
-    this.api.grantResource(gains[node.userData.kind], amt);
-    node.visible = false;
-    node.userData.respawnAt = this.time + 40 + Math.random() * 40;
-    this.api.toast(`Gathered ${amt} ${gains[node.userData.kind]}!`);
+    this.api.grantResource(gains[node.kind], amt);
+    node.alive = false;
+    node.respawnAt = this.time + 40 + Math.random() * 40;
+    this.api.toast(`Gathered ${amt} ${gains[node.kind]}!`);
     this.api.sfx("coin");
   }
 
@@ -702,8 +873,16 @@ export class PirationWorld {
   update(dt) {
     this.time += dt;
     const input = this.readInput();
-    if (this.mode === "sail") this.updateSail(dt, input);
-    else this.updateOnFoot(dt, input);
+    this.updateFx(dt);
+    if (this.battle) this.updateBattle(dt);
+    else {
+      if (this.shipModel) {
+        this.shipModel.position.x = 0;
+        this.shipModel.position.z = 0;
+      }
+      if (this.mode === "sail") this.updateSail(dt, input);
+      else this.updateOnFoot(dt, input);
+    }
     this.updateCamera(dt);
     this.updateSea(dt);
     this.updateClouds(dt);
@@ -712,6 +891,30 @@ export class PirationWorld {
     this.updateAmbush(dt);
     this.updateAction();
     this.updateHUD();
+  }
+
+  updateBattle(dt) {
+    const e = this.battle;
+    e.mesh.position.copy(e.basePos);
+    e.mesh.position.y += Math.sin(this.time * 2.3) * 0.2;
+    const es = e.shake;
+    if (es.dur > 0) {
+      const f = 1 - es.t / es.dur;
+      e.mesh.position.x += (Math.random() - 0.5) * es.amp * f;
+      e.mesh.position.z += (Math.random() - 0.5) * es.amp * f;
+    }
+    this.ship.position.y = Math.sin(this.time * 2.1) * 0.16;
+    const ss = this.shake;
+    if (this.shipModel) {
+      if (ss.dur > 0) {
+        const f = 1 - ss.t / ss.dur;
+        this.shipModel.position.x = (Math.random() - 0.5) * ss.amp * f;
+        this.shipModel.position.z = (Math.random() - 0.5) * ss.amp * f;
+      } else {
+        this.shipModel.position.x = 0;
+        this.shipModel.position.z = 0;
+      }
+    }
   }
 
   readInput() {
@@ -818,6 +1021,17 @@ export class PirationWorld {
   }
 
   updateCamera(dt) {
+    if (this.battle) {
+      const mid = new THREE.Vector3()
+        .addVectors(this.ship.position, this.battle.mesh.position)
+        .multiplyScalar(0.5);
+      const dir = new THREE.Vector3().subVectors(this.battle.mesh.position, this.ship.position).normalize();
+      const desired = mid.clone().addScaledVector(dir, -13);
+      desired.y = 5.5 + Math.sin(this.time * 1.1) * 0.35;
+      this.camera.position.lerp(desired, Math.min(1, dt * 2.8));
+      this.camera.lookAt(mid.x, 1.4, mid.z);
+      return;
+    }
     const target = this.mode === "sail" ? this.ship : this.player;
     const dist = this.mode === "sail" ? 15 : this.mode === "walk" ? 5.6 : 5.2;
     const height = this.mode === "sail" ? 8 : this.mode === "walk" ? 3.1 : 2.6;
@@ -869,27 +1083,34 @@ export class PirationWorld {
   }
 
   updateNodes() {
-    for (const n of this.nodes) {
-      if (!n.visible && n.userData.respawnAt && this.time >= n.userData.respawnAt) {
-        n.visible = true;
-        n.userData.respawnAt = 0;
-      }
-      if (n.visible) {
-        n.rotation.y += 0.006;
-        if (n.userData.kind === "gold") n.position.y = n.userData.baseY + Math.sin(this.time * 2.4) * 0.08;
-        else n.position.y = n.userData.baseY;
+    const dummy = new THREE.Object3D();
+    for (const rec of Object.values(this.nodeInstances)) {
+      for (const kind of ["wood", "cotton", "iron", "gold"]) {
+        const { items, mesh } = rec[kind];
+        if (!mesh) continue;
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          if (!it.alive && it.respawnAt && this.time >= it.respawnAt) it.alive = true;
+          const bob = kind === "gold" && it.alive ? Math.sin(this.time * 2.4 + it.rot) * 0.08 : 0;
+          dummy.position.set(it.x, it.alive ? it.h + bob : it.h - 5, it.z);
+          dummy.rotation.set(0, it.rot + this.time * 0.04, 0);
+          dummy.scale.setScalar(it.alive ? 1 : 0.0001);
+          dummy.updateMatrix();
+          mesh.setMatrixAt(i, dummy.matrix);
+        }
+        mesh.instanceMatrix.needsUpdate = true;
       }
     }
   }
 
   updateAmbush(dt) {
     if (this.mode !== "sail") {
-      this.ambushTimer = 12;
+    this.ambushTimer = 10;
       return;
     }
-    const island = this.islandAt(this.ship.position.x, this.ship.position.z, 46);
+    const island = this.islandAt(this.ship.position.x, this.ship.position.z, 34);
     if (island) {
-      this.ambushTimer = 12;
+      this.ambushTimer = 10;
       return;
     }
     this.ambushTimer -= dt;
@@ -906,7 +1127,7 @@ export class PirationWorld {
         }
       }
     } else if (this.ambushTimer <= 0) {
-      this.ambushTimer = 16 + Math.random() * 14;
+      this.ambushTimer = 14 + Math.random() * 10;
       this.spawnAmbush();
     }
   }
@@ -961,7 +1182,7 @@ export class PirationWorld {
         const n = this.nearestNode();
         if (n) {
           const names = { wood: "Gather wood", cotton: "Pick cotton", iron: "Mine iron", gold: "Dig treasure" };
-          label = names[n.userData.kind] + ` (${this.api.getGatherCost?.() ?? 2}⚡)`;
+          label = names[n.kind] + ` (${this.api.getGatherCost?.() ?? 2}⚡)`;
           kind = "gather";
           node = n;
           enabled = this.api.getEnergy() >= 2;
@@ -981,12 +1202,17 @@ export class PirationWorld {
   nearestNode() {
     let best = null;
     let bestD = 3.4;
-    for (const n of this.nodes) {
-      if (!n.visible) continue;
-      const d = this.player.position.distanceTo(n.position);
-      if (d < bestD) {
-        bestD = d;
-        best = n;
+    const p = this.player.position;
+    for (const rec of Object.values(this.nodeInstances)) {
+      for (const kind of ["wood", "cotton", "iron", "gold"]) {
+        for (const it of rec[kind].items) {
+          if (!it.alive) continue;
+          const d = Math.hypot(p.x - it.x, p.z - it.z);
+          if (d < bestD) {
+            bestD = d;
+            best = { ...it, kind };
+          }
+        }
       }
     }
     return best;
@@ -1070,6 +1296,27 @@ function makeRadialTexture(inner, outer) {
   return tex;
 }
 
+function makeRingTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.strokeStyle = "rgba(180, 235, 255, 0.9)";
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.arc(64, 64, 40, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(180, 235, 255, 0.35)";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(64, 64, 52, 0, Math.PI * 2);
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 function makeCloudTexture() {
   const c = document.createElement("canvas");
   c.width = 256;
@@ -1106,6 +1353,44 @@ function makeVoxelTree(rng) {
   top.position.y = 3.4 + s;
   g.add(top);
   return g;
+}
+
+const TREE_BOXES = [
+  { s: [0.55, 1.7, 0.55], p: [0, 0.85, 0], c: [0.54, 0.35, 0.2] },
+  { s: [2.0, 2.0, 2.0], p: [0, 3.0, 0], c: [0.2, 0.72, 0.28] },
+  { s: [1.45, 1.45, 1.45], p: [0, 4.45, 0], c: [0.24, 0.66, 0.3] },
+];
+
+const GOLD_BOXES = [
+  { s: [0.82, 0.36, 0.82], p: [0, 0.18, 0], c: [1.0, 0.84, 0.32] },
+  { s: [0.62, 0.36, 0.62], p: [0.05, 0.62, -0.04], c: [1.0, 0.82, 0.28] },
+  { s: [0.46, 0.34, 0.46], p: [-0.04, 1.0, 0.05], c: [0.98, 0.78, 0.26] },
+];
+
+function makeMergedBoxes(parts) {
+  const pos = [];
+  const col = [];
+  const idx = [];
+  let base = 0;
+  for (const p of parts) {
+    const g = new THREE.BoxGeometry(p.s[0], p.s[1], p.s[2]);
+    g.translate(p.p[0], p.p[1], p.p[2]);
+    const gp = g.attributes.position.array;
+    for (let i = 0; i < gp.length / 3; i++) {
+      pos.push(gp[i * 3], gp[i * 3 + 1], gp[i * 3 + 2]);
+      col.push(p.c[0], p.c[1], p.c[2]);
+    }
+    const gi = g.index.array;
+    for (let i = 0; i < gi.length; i++) idx.push(base + gi[i]);
+    base += gp.length / 3;
+    g.dispose();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
 }
 
 function makeGoldStack(rng) {
