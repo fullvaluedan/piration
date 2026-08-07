@@ -155,7 +155,7 @@ function voyage(state, doBoss) {
   // optional boss
   const boss = core.currentEncounter(state, game);
   const bossHpPct = state.voyage?.playerHp / core.playerMaxHp(state, game);
-  const shipOk = state.shipId === "dreadnought";
+  const shipOk = state.shipId === "galleon";
   if (doBoss && boss?.type === "boss" && bossHpPct >= 0.8 && shipOk) {
     if (core.startFight(state, cards, game).ok) {
       const won = fightToEnd(state);
@@ -386,9 +386,9 @@ function smokeTests() {
   // captain unlock flow
   s.stats.endlessKills = 20;
   s.character.level = 10;
-  if (!core.canUnlock(s, game, "bones")) throw new Error("bones mission should be met");
-  const u = core.unlockCaptain(s, cards, game, "bones");
-  if (!u.ok) throw new Error("bones unlock failed");
+  if (!core.canUnlock(s, game, "captainbanshee")) throw new Error("banshee mission should be met");
+  const u = core.unlockCaptain(s, cards, game, "captainbanshee");
+  if (!u.ok) throw new Error("banshee unlock failed");
   if (u.cards.length !== 10) throw new Error("starter grant wrong size");
   // endless flow
   s = core.newGame(cards, game);
@@ -421,7 +421,8 @@ log("--- progression sim ---");
 let state = core.newGame(cards, game);
 let voyages = 0;
 let endlessBursts = 0;
-while (state.character.level < core.MAX_LEVEL && voyages < 2000) {
+const cap = game.balance.maxLevel || core.MAX_LEVEL;
+while (state.character.level < cap && voyages < 2000) {
   voyages += 1;
   const doBoss = voyages % 4 === 0;
   voyage(state, doBoss);
@@ -430,7 +431,7 @@ while (state.character.level < core.MAX_LEVEL && voyages < 2000) {
 }
 reportProgress(state, "MAX LEVEL reached");
 const timeToMaxH = voyageSeconds / 3600;
-log(`voyage-only time to reach Lv30: ${timeToMaxH.toFixed(1)}h`);
+log(`voyage-only time to reach Lv${cap}: ${timeToMaxH.toFixed(1)}h`);
 
 // mission push: deep Endless runs until all captains unlock
 log("--- deep endless mission runs at max gear ---");

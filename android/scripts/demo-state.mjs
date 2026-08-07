@@ -19,8 +19,8 @@ export function demoState() {
   s.character.level = 9;
   s.character.xp = 0;
   s.character.xpToNext = core.xpNeeded(game, 9);
-  s.shipId = "brig";
-  s.shipDura = 75;
+  s.shipId = "frigate";
+  s.shipDura = 78;
   s.inventory = {
     Marks: 1240,
     Gold: 45,

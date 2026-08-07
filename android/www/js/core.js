@@ -2,8 +2,33 @@
 // Everything operates on a plain `state` object so the same code runs in the
 // browser (ui.js) and in Node (scripts/sim-progression.mjs).
 
-export const MAX_LEVEL = 30;
+export const MAX_LEVEL = 20;
 export const SAVE_VERSION = 3;
+
+function levelCap(game) {
+  return game?.balance?.maxLevel || MAX_LEVEL;
+}
+
+// deterministic RNG for combat (seed + call counter, no stored closures)
+function rngNext(combat) {
+  combat.rngCount = (combat.rngCount || 0) + 1;
+  let x = (combat.seed ^ Math.imul(combat.rngCount, 2654435761)) >>> 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 2246822507) >>> 0;
+  x ^= x >>> 13;
+  x = Math.imul(x, 3266489909) >>> 0;
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+function seededShuffle(arr, combat) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rngNext(combat) * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 const RESOURCE_KEYS = [
   "Wood",
@@ -14,6 +39,14 @@ const RESOURCE_KEYS = [
   "MapFragment",
   "Rum",
 ];
+
+const ELEMENT_ORDER = ["Fire", "Water", "Earth", "Air", "Lightning", "Ice", "Light", "Dark"];
+
+export function mobElement(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return ELEMENT_ORDER[h % ELEMENT_ORDER.length];
+}
 
 export function deepCopy(o) {
   return JSON.parse(JSON.stringify(o));
@@ -116,6 +149,9 @@ export function newGame(cards, game) {
     enhancements: {},
     shipId: "skiff",
     shipDura: shipById(game, "skiff").hull,
+    energy: game.balance.energy.max,
+    energyMax: game.balance.energy.max,
+    energyUpdatedAt: Math.floor(Date.now() / 1000),
     crew: [],
     stats: {
       voyages: 0,
@@ -157,6 +193,19 @@ export function deserialize(json, cards, game) {
   try {
     const s = JSON.parse(json);
     if (!s || s.version !== SAVE_VERSION) return newGame(cards, game);
+    const CAPTAIN_MIGRATE = {
+      morgaine: "ladylara",
+      bones: "captainbanshee",
+      siren: "resourcetrader",
+      ironbeard: "rustbeard",
+      oz: "captainhightide",
+      cetus: "royalnavyadmiral",
+    };
+    if (CAPTAIN_MIGRATE[s.captainId]) s.captainId = CAPTAIN_MIGRATE[s.captainId];
+    s.unlockedCaptains = (s.unlockedCaptains || []).map((id) => CAPTAIN_MIGRATE[id] || id);
+    for (const e of s.leaderboard || []) {
+      if (CAPTAIN_MIGRATE[e.captain]) e.captain = CAPTAIN_MIGRATE[e.captain];
+    }
     if (!s.character?.level) s.character = { level: 1, xp: 0, xpToNext: xpNeeded(game, 1) };
     s.character.xpToNext = xpNeeded(game, s.character.level);
     s.inventory = { ...defaultInventory(game), ...(s.inventory || {}) };
@@ -175,6 +224,9 @@ export function deserialize(json, cards, game) {
     if (!s.unlockedCaptains?.length) s.unlockedCaptains = ["morgaine"];
     if (!shipById(game, s.shipId)) s.shipId = "skiff";
     if (!s.shipDura) s.shipDura = shipById(game, s.shipId).hull;
+    if (typeof s.energyMax !== "number" || !s.energyMax) s.energyMax = game.balance.energy.max;
+    if (typeof s.energy !== "number") s.energy = s.energyMax;
+    if (!s.energyUpdatedAt) s.energyUpdatedAt = Math.floor(Date.now() / 1000);
     s.crew = Array.isArray(s.crew) ? s.crew : [];
     s.leaderboard = Array.isArray(s.leaderboard) ? s.leaderboard : [];
     if (typeof s.soundOn !== "boolean") s.soundOn = true;
@@ -186,6 +238,39 @@ export function deserialize(json, cards, game) {
   }
 }
 
+// ---------- energy (gathering / ambushes) ----------
+
+export function regenEnergy(state, game) {
+  const b = game.balance;
+  if (b.energy.unlimited) {
+    state.energy = state.energyMax;
+    state.energyUpdatedAt = Math.floor(Date.now() / 1000);
+    return;
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (state.energy >= state.energyMax) {
+    state.energyUpdatedAt = now;
+    return;
+  }
+  const elapsed = Math.max(0, now - (state.energyUpdatedAt || now));
+  const gain = Math.floor(elapsed / b.energy.regenSec);
+  if (gain > 0) {
+    state.energy = Math.min(state.energyMax, state.energy + gain);
+    state.energyUpdatedAt += gain * b.energy.regenSec;
+  }
+}
+
+export function spendEnergy(state, game, n) {
+  regenEnergy(state, game);
+  if (game.balance.energy.unlimited) return { ok: true, unlimited: true };
+  if (state.energy < n) {
+    return { ok: false, reason: `Need ${n} energy — it refills over time` };
+  }
+  state.energy -= n;
+  state.energyUpdatedAt = Math.floor(Date.now() / 1000);
+  return { ok: true };
+}
+
 // ---------- character XP ----------
 
 export function addXp(state, game, amount) {
@@ -194,13 +279,14 @@ export function addXp(state, game, amount) {
   c.xp += amount;
   state.stats.xpGained += amount;
   let levels = 0;
-  while (c.level < MAX_LEVEL && c.xp >= c.xpToNext) {
+  const cap = levelCap(game);
+  while (c.level < cap && c.xp >= c.xpToNext) {
     c.xp -= c.xpToNext;
     c.level += 1;
     levels += 1;
     c.xpToNext = xpNeeded(game, c.level);
   }
-  if (c.level >= MAX_LEVEL) {
+  if (c.level >= cap) {
     c.xpToNext = 0;
     c.xp = 0;
   }
@@ -457,7 +543,7 @@ export function startVoyage(state, game, zoneId) {
     zoneId,
     encounters,
     index: 0,
-    bossRemaining: true,
+    bossRemaining: !!zone.boss,
     playerHp: playerMaxHp(state, game),
     results: [],
     startedAt: Date.now(),
@@ -470,7 +556,7 @@ export function currentEncounter(state, game) {
   if (!state.voyage) return null;
   const v = state.voyage;
   if (v.index < v.encounters.length) return v.encounters[v.index];
-  if (v.bossRemaining) {
+  if (v.bossRemaining && zoneById(game, v.zoneId)?.boss) {
     const zone = zoneById(game, v.zoneId);
     return { type: "boss", monsterId: zone.boss.id, zoneId: zone.id, isElite: false, isBoss: true };
   }
@@ -583,7 +669,9 @@ export function startFight(state, cards, game) {
   const maxHp = Math.round(zone.enemyHp * scale * hpMult);
   const dmg = Math.max(3, Math.round(zone.enemyDmg * scale * dmgMult));
   const enemyName = e.isBoss ? zone.boss.name : mon.name;
-  const deck = shuffle(combatDeck(state, cards, game));
+  const seed = randInt(1, 0x7fffffff);
+  const combatSeed = { seed, rngCount: 0 };
+  const deck = seededShuffle(combatDeck(state, cards, game), combatSeed);
   const hand = [];
   const hs = handSize(state, game) + (currentCaptain(state, game)?.ability?.kind === "drawAndLuck" ? 2 : 0);
   for (let i = 0; i < hs && deck.length; i++) hand.push(deck.shift());
@@ -592,6 +680,7 @@ export function startFight(state, cards, game) {
     encounter: e,
     enemy: {
       name: enemyName,
+      element: mobElement(e.monsterId),
       maxHp,
       hp: maxHp,
       dmg,
@@ -612,6 +701,8 @@ export function startFight(state, cards, game) {
     won: false,
     log: [`Engaged ${enemyName}!`],
     endless: null,
+    seed,
+    rngCount: combatSeed.rngCount,
   };
   state.stats.fights += 1;
   return { ok: true };
@@ -635,7 +726,7 @@ function drawCards(combat, cards, state, n) {
   for (let i = 0; i < n; i++) {
     if (!combat.drawPile.length) {
       if (!combat.discard.length) break;
-      combat.drawPile = shuffle(combat.discard);
+      combat.drawPile = seededShuffle(combat.discard, combat);
       combat.discard = [];
     }
     if (combat.drawPile.length) combat.hand.push(combat.drawPile.shift());
@@ -661,7 +752,7 @@ function enemyDamage(combat, state, game) {
 }
 
 function enemyNextIntent(combat) {
-  const r = Math.random();
+  const r = rngNext(combat);
   if (r < 0.16) return "brace";
   if (r < 0.34) return "charge";
   return "attack";
@@ -721,6 +812,19 @@ export function playCard(state, cards, game, handIndex) {
     let dmg = card.damage;
     if (cap?.ability?.kind === "atkBonus") dmg += cap.ability.value;
     dmg = Math.round(dmg * (1 + crewDmgBonus(state, game)));
+    // elemental rock-paper-scissors
+    const atk = cap?.element;
+    const def = c.enemy.element;
+    let mult = 1;
+    if (atk && def && atk !== def) {
+      const rule = game.elements?.[atk];
+      if (rule?.strong?.includes(def)) mult = game.balance.elementMult;
+      else if (rule?.weak?.includes(def)) mult = game.balance.elementWeak;
+    }
+    if (mult !== 1) {
+      dmg = Math.max(1, Math.round(dmg * mult));
+      c.log.push(`${atk} vs ${def}: ${mult > 1 ? "effective!" : "resisted."}`);
+    }
     [c.enemy.hp, c.enemy.shield] = applyDamage(c.enemy.hp, c.enemy.shield, dmg);
     c.log.push(`${card.name} hits for ${dmg}.`);
   }
@@ -776,7 +880,9 @@ function rewardForVictory(state, cards, game) {
   const isBoss = c.encounter.isBoss;
   const xpBase = zone.xpBase * (isBoss ? zone.bossXpMult : isElite ? zone.eliteXpMult : 1);
   const xp = Math.round(xpBase);
-  const marks = randInt(zone.marks[0], zone.marks[1]) * (isElite ? 2 : isBoss ? 3 : 1);
+  const cap = currentCaptain(state, game);
+  const marksBonus = cap?.ability?.kind === "marksBonus" ? 1 + cap.ability.value : 1;
+  const marks = Math.round(randInt(zone.marks[0], zone.marks[1]) * (isElite ? 2 : isBoss ? 3 : 1) * marksBonus);
   const gold = randInt(zone.gold[0], zone.gold[1]) * (isElite ? 2 : isBoss ? 3 : 1);
   const loot = rollLoot(state, game, zone, isElite, isBoss);
   const forced = isBoss ? zone.bossCardRarity : null;
@@ -896,14 +1002,16 @@ function spawnEndlessEnemy(state, cards, game) {
   const mon = monsterById(game, monId) || { name: monId, hpMult: 1, dmgMult: 1 };
   const maxHp = Math.round(b.endlessBaseHp * waveScale * mon.hpMult * (isElite ? 1.55 : 1));
   const dmg = Math.max(4, Math.round(b.endlessBaseDmg * dmgScale * mon.dmgMult * (isElite ? 1.2 : 1)));
-  const deck = shuffle(combatDeck(state, cards, game));
+  const seed = randInt(1, 0x7fffffff);
+  const combatSeed = { seed, rngCount: 0 };
+  const deck = seededShuffle(combatDeck(state, cards, game), combatSeed);
   const hand = [];
   const hs = handSize(state, game) + (currentCaptain(state, game)?.ability?.kind === "drawAndLuck" ? 2 : 0);
   for (let i = 0; i < hs && deck.length; i++) hand.push(deck.shift());
   state.combat = {
     mode: "endless",
     encounter: { type: "monster", monsterId: monId, zoneId: "abyss", isElite, isBoss: false },
-    enemy: { name: mon.name, maxHp, hp: maxHp, dmg, shield: 0, intent: "attack", charged: false },
+    enemy: { name: mon.name, element: mobElement(monId), maxHp, hp: maxHp, dmg, shield: 0, intent: "attack", charged: false },
     playerHp: en.hp,
     playerMaxHp: playerMaxHp(state, game),
     playerShield: 0,
@@ -917,6 +1025,8 @@ function spawnEndlessEnemy(state, cards, game) {
     won: false,
     log: [`Wave ${en.wave} — ${mon.name} appears!`],
     endless: { wave: en.wave, isElite },
+    seed,
+    rngCount: combatSeed.rngCount,
   };
   state.stats.fights += 1;
   return true;
@@ -1078,6 +1188,6 @@ export function shipStatus(state, game) {
 
 export function totalXpToMax(game) {
   let sum = 0;
-  for (let l = 1; l < MAX_LEVEL; l++) sum += xpNeeded(game, l);
+  for (let l = 1; l < levelCap(game); l++) sum += xpNeeded(game, l);
   return sum;
 }

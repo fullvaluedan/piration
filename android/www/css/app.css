@@ -25,13 +25,20 @@ html, body {
 }
 
 #app {
-  height: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  padding: calc(8px + var(--safe-top)) 12px calc(8px + var(--safe-bottom));
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(780px, 96vw);
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
   gap: 10px;
+  background: rgba(11, 20, 36, 0.94);
+  border-left: 1px solid #2a4064;
+  overflow: hidden;
+  z-index: 40;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.45);
 }
 
 .top {
@@ -109,6 +116,8 @@ h1 {
   border: 1px solid #2a4064;
   border-radius: 14px;
   padding: 12px;
+  flex: 1;
+  min-height: 0;
 }
 
 .section {
@@ -431,6 +440,13 @@ button.btn.mini {
 .rarity.epic { color: #c79bff; border-color: #a05ad6; }
 .rarity.legendary { color: #ffe39b; border-color: #e6aa3c; }
 
+.element-pill {
+  color: #ffe39b;
+  border-color: #8a6d1f;
+  font-size: 0.72rem;
+  vertical-align: middle;
+}
+
 /* ---- art integration ---- */
 
 .card-art {
@@ -593,6 +609,131 @@ button.btn.mini {
   border-radius: 50%;
   border: 3px solid var(--accent);
   background: #0d1c33;
+}
+
+/* ---- 16:9 world overlay ---- */
+
+#worldCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+  background: #2e9bff;
+}
+
+#worldHud {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+#worldHud button { pointer-events: auto; }
+
+#hudTop {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.hud-btn {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(10, 26, 46, 0.62);
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  min-height: 42px;
+  backdrop-filter: blur(4px);
+}
+
+.hud-btn.action {
+  position: absolute;
+  right: 24px;
+  bottom: 34px;
+  min-width: 150px;
+  background: var(--accent);
+  color: #1a1205;
+  font-size: 0.95rem;
+}
+
+.hud-btn.action:disabled {
+  background: rgba(90, 101, 117, 0.6);
+  color: rgba(230, 238, 246, 0.6);
+}
+
+.hud-chip {
+  display: inline-block;
+  background: rgba(10, 26, 46, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #fff;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+.hud-chip.muted { color: #cfe4ff; opacity: 0.85; }
+
+#hudStatus, #hudStats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+#joy {
+  position: absolute;
+  left: 26px;
+  bottom: 28px;
+  width: 126px;
+  height: 126px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#joyKnob {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -27px 0 0 -27px;
+  transition: transform 0.04s linear;
+}
+
+.hud-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 26, 46, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #dff1ff;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(4px);
 }
 
 @media (max-width: 420px) {

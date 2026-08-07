@@ -1,10 +1,15 @@
-const CACHE = "piration-offline-v5";
+const CACHE = "piration-offline-v6";
 const ASSETS = [
   "./",
   "./index.html",
   "./css/app.css",
   "./js/core.js",
   "./js/ui.js",
+  "./js/world3d.js",
+  "./vendor/three.module.min.js",
+  "./vendor/meshopt_decoder.module.js",
+  "./vendor/jsm/loaders/GLTFLoader.js",
+  "./vendor/jsm/utils/BufferGeometryUtils.js",
   "./data/cards.json",
   "./data/game.json",
   "./assets/manifest.json",

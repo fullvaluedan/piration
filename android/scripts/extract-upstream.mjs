@@ -156,12 +156,14 @@ for (const [id, token, variant] of mobDefs) {
 
 // ---------- captains ----------
 const captainDefs = [
-  ["morgaine", "ladylara", "avatar_ladylara_pfp_001.png"],
-  ["bones", "captainbanshee", "avatar_captainbanshee_pfp_002.png"],
-  ["siren", "captainbanshee", "arcade_pfp_the_banshee.png"],
-  ["ironbeard", "rustbeard", "avatar_rustbeard_thumbnail_001.png"],
-  ["oz", "captainhightide", "avatar_captainhightide_pfp.png"],
-  ["cetus", "royalnavyadmiral", "avatar_royalnavyadmiral_pfp_001.png"],
+  ["ladylara", "ladylara", "avatar_ladylara_pfp_001.png"],
+  ["captainbanshee", "captainbanshee", "avatar_captainbanshee_pfp_002.png"],
+  ["resourcetrader", "resourcetrader", "avatar_resourcetrader_pfp_001.png"],
+  ["rustbeard", "rustbeard", "avatar_rustbeard_thumbnail_001.png"],
+  ["captainhightide", "captainhightide", "avatar_captainhightide_pfp.png"],
+  ["royalnavyadmiral", "royalnavyadmiral", "avatar_royalnavyadmiral_pfp_001.png"],
+  ["commodore", "commodoreChompington", "avatar_commodore_pfp_001.png"],
+  ["admiralironsides", "admiralironsides", "avatar_admiralironsides_pfp_001.png"],
 ];
 for (const [id, token, file] of captainDefs) {
   const pick = allArt.find(
@@ -271,6 +273,32 @@ for (const [k, path] of Object.entries(sfxMap)) {
     log(`sfx ${k}: ok`);
   } catch (e) {
     log(`sfx ${k}: FAIL ${e.message.slice(0, 120)}`);
+  }
+}
+
+// ---------- 3D models (self-contained glTF) ----------
+const modelDefs = [
+  ["player", "Founder's Pirate NFT/model3d/1.gltf"],
+  ["ship_skiff", "Voxel Game Assets/ships/Gothic Ships/item_2x2_pirateskiffgothic/VE/item_2x2_pirateskiffgothic.gltf"],
+  ["ship_sloop", "Voxel Game Assets/ships/Gothic Ships/item_4x8_piratesloopgothic/VE/item_4x8_piratesloopgothic.gltf"],
+  ["ship_brig", "Voxel Game Assets/ships/Gothic Ships/item_5x12_piratemaraudergothic/VE/item_5x12_piratemaraudergothic.gltf"],
+  ["ship_galleon", "Voxel Game Assets/ships/Gothic Ships/item_4x8_pirategaellongothic/VE/item_4x8_pirategaellongothic.gltf"],
+  ["ship_dreadnought", "Voxel Game Assets/ships/Gothic Ships/item_5x10_piratefrigategothic/VE/item_5x10_piratefrigategothic.gltf"],
+  ["mob_anglerfish", "Voxel Game Assets/Mob Enemies /Anglerfish/Anglerfish Water /model.gltf"],
+  ["mob_deepone", "Voxel Game Assets/Mob Enemies /Deep One/deepone/Deep One Neutral Common/model.gltf"],
+  ["mob_charybdis", "Voxel Game Assets/Mob Enemies /Charybdis/mob_6x6_charybdis/VE/Optimized/model.gltf"],
+  ["prop_shipwright", "Voxel Game Assets/world items/buildings/Shipwright/Phase 01/Shipwright Phase 1 Legendary/model.gltf"],
+  ["prop_tree", "Voxel Game Assets/world items/Decorations/Alt Trees/item_8x8x3_alternatetrees01/VE/item_8x8x3_alternatetrees01.gltf"],
+  ["prop_chest", "Voxel Game Assets/chests/Bandit Chest/chest_bandit.gltf"],
+  ["prop_cotton", "Voxel Game Assets/resources/Cotton/ui_icon_cotton.gltf"],
+];
+manifest.models = {};
+for (const [id, path] of modelDefs) {
+  try {
+    manifest.models[id] = write(`models/${id}.gltf`, await fetchBlob(ART, path));
+    log(`model ${id}: ok`);
+  } catch (e) {
+    log(`model ${id}: FAIL ${String(e.message).slice(0, 100)}`);
   }
 }
 

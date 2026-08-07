@@ -53,8 +53,8 @@ const PRESETS = {
   ship: ["sloop", "brig", "galleon", "dreadnought"],
   recipe: ["cannon_part", "map_kit", "rum_barrel"],
   enhance: ["cannon_blast", "broadside", "musket_shot"],
-  unlock: ["bones", "siren", "ironbeard", "oz", "cetus"],
-  switch: ["bones", "siren", "ironbeard", "oz", "cetus"],
+  unlock: ["captainbanshee", "resourcetrader", "rustbeard", "captainhightide", "royalnavyadmiral", "commodore", "admiralironsides"],
+  switch: ["captainbanshee", "resourcetrader", "rustbeard", "captainhightide", "royalnavyadmiral", "commodore", "admiralironsides"],
 };
 
 function fakeButtons(sel) {
@@ -72,6 +72,7 @@ function fakeButtons(sel) {
 globalThis.document = {
   querySelector: (sel) => el(sel.replace(/^#/, "")),
   querySelectorAll: () => [],
+  getElementById: () => null,
   addEventListener: () => {},
   createElement: (tag) => {
     const b = makeEl("dyn_" + tag + "_" + Math.random().toString(36).slice(2, 8));
@@ -212,8 +213,8 @@ check("shipyard interactions ran", html().includes("Cargo"));
 
 // captains interactions
 clickTab("captains");
-el("btn_unlock_bones")?.click();
-el("btn_switch_bones")?.click();
+el("btn_unlock_captainbanshee")?.click();
+el("btn_switch_captainbanshee")?.click();
 check("captains interactions ran", html().includes("Captain"));
 
 // collection interactions

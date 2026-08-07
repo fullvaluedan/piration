@@ -15,7 +15,29 @@
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
-  <div id="app">
+  <canvas id="worldCanvas"></canvas>
+
+  <div id="worldHud">
+    <div id="hudTop">
+      <button class="hud-btn" id="menuBtn" title="Game menu">☰</button>
+      <div id="hudStatus">
+        <span id="hudMode" class="hud-chip">Sailing</span>
+        <span id="hudZone" class="hud-chip muted"></span>
+        <span id="hudSpeed" class="hud-chip muted"></span>
+      </div>
+      <div id="hudStats">
+        <span id="hudEnergy" class="hud-chip">⚡ --</span>
+        <span id="hudMarks" class="hud-chip">⛁ --</span>
+        <span id="hudGold" class="hud-chip">¤ --</span>
+        <span id="hudRes" class="hud-chip">🪵 --</span>
+      </div>
+    </div>
+    <div id="joy"><div id="joyKnob"></div></div>
+    <button id="worldAction" class="hud-btn action" disabled>—</button>
+    <div id="hudHint" class="hud-hint">Sail to an island · watch for things in the deep…</div>
+  </div>
+
+  <div id="app" style="display:none">
     <header class="top">
       <div class="brand">
         <span class="skull">☠</span>
@@ -26,6 +48,7 @@
         <div class="brand-actions">
           <button class="help-btn" id="soundBtn" title="Sound on/off">🔊</button>
           <button class="help-btn" id="helpBtn" title="How to play">?</button>
+          <button class="help-btn" id="closePanelBtn" title="Back to the world">✕</button>
         </div>
       </div>
       <div id="stats" class="stats">Loading…</div>
@@ -54,6 +77,14 @@
       Offline · saves on device · inspired by Pirate Nation OSS (CC0/MIT)
     </footer>
   </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js",
+        "three/addons/": "./vendor/jsm/"
+      }
+    }
+  </script>
   <script src="js/ui.js" type="module"></script>
   <script>
     if ('serviceWorker' in navigator) {

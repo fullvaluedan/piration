@@ -1,12 +1,13 @@
 {
   "version": 3,
   "balance": {
+    "maxLevel": 20,
     "playerBaseHp": 30,
     "hpPerHull": 0.6,
     "maxApBase": 4,
     "apPerCannon": 1,
     "handSize": 5,
-    "xpCurveBase": 80,
+    "xpCurveBase": 155,
     "xpCurvePower": 1.12,
     "enemyLevelScale": 0.02,
     "enemyLevelScaleCap": 1.4,
@@ -17,6 +18,15 @@
     "enhanceCost": {
       "Marks": 30
     },
+    "energy": {
+      "unlimited": true,
+      "max": 100,
+      "regenSec": 300,
+      "gatherCost": 3,
+      "combatCost": 8
+    },
+    "elementMult": 1.5,
+    "elementWeak": 0.75,
     "bribeCostMult": 0.6,
     "fleeDurabilityLoss": 0.12,
     "defeatDurabilityLoss": 0.25,
@@ -45,6 +55,88 @@
       "rare": 6,
       "epic": 12,
       "legendary": 18
+    }
+  },
+  "elements": {
+    "Fire": {
+      "strong": [
+        "Ice",
+        "Earth"
+      ],
+      "weak": [
+        "Water",
+        "Light"
+      ]
+    },
+    "Water": {
+      "strong": [
+        "Fire",
+        "Earth"
+      ],
+      "weak": [
+        "Lightning",
+        "Ice"
+      ]
+    },
+    "Earth": {
+      "strong": [
+        "Lightning",
+        "Air"
+      ],
+      "weak": [
+        "Ice",
+        "Fire"
+      ]
+    },
+    "Air": {
+      "strong": [
+        "Ice",
+        "Light"
+      ],
+      "weak": [
+        "Earth",
+        "Lightning"
+      ]
+    },
+    "Lightning": {
+      "strong": [
+        "Water",
+        "Air"
+      ],
+      "weak": [
+        "Earth",
+        "Dark"
+      ]
+    },
+    "Ice": {
+      "strong": [
+        "Earth",
+        "Water"
+      ],
+      "weak": [
+        "Fire",
+        "Air"
+      ]
+    },
+    "Light": {
+      "strong": [
+        "Dark",
+        "Fire"
+      ],
+      "weak": [
+        "Air",
+        "Water"
+      ]
+    },
+    "Dark": {
+      "strong": [
+        "Light",
+        "Lightning"
+      ],
+      "weak": [
+        "Fire",
+        "Light"
+      ]
     }
   },
   "zones": [
@@ -123,12 +215,7 @@
         "tide_hydra",
         "smuggler_brig"
       ],
-      "boss": {
-        "id": "armada_captain",
-        "name": "Armada Captain",
-        "hpMult": 2.1,
-        "dmgMult": 1.3
-      },
+      "boss": null,
       "lootWeights": {
         "Wood": 24,
         "Cotton": 26,
@@ -270,6 +357,57 @@
       "bossCardRarity": "epic"
     },
     {
+      "id": "skullbone",
+      "name": "Skullbone Cove",
+      "desc": "Bone-white cliffs and old wars. No bosses, just teeth.",
+      "minLevel": 8,
+      "enemyHp": 66,
+      "enemyDmg": 11,
+      "voyageLength": 3,
+      "encounterWeights": {
+        "monster": 0.66,
+        "elite": 0.18,
+        "cache": 0.16
+      },
+      "monsterPool": [
+        "reef_horror",
+        "iron_privateer",
+        "kraken_spawn"
+      ],
+      "elitePool": [
+        "kraken_spawn",
+        "siren_barge"
+      ],
+      "boss": null,
+      "lootWeights": {
+        "Wood": 16,
+        "Cotton": 14,
+        "Iron": 22,
+        "GoldNugget": 11,
+        "Rum": 7,
+        "CannonPart": 7,
+        "MapFragment": 5,
+        "Marks": 17,
+        "Gold": 7
+      },
+      "lootMin": 3,
+      "lootMax": 5,
+      "marks": [
+        30,
+        58
+      ],
+      "gold": [
+        1,
+        7
+      ],
+      "xpBase": 30,
+      "eliteXpMult": 2.5,
+      "bossXpMult": 4,
+      "cardChance": 0.46,
+      "eliteCardChance": 1,
+      "bossCardRarity": "epic"
+    },
+    {
       "id": "triangle",
       "name": "Devil's Triangle",
       "desc": "Map fragments and madness. Only hard crews sail here.",
@@ -293,12 +431,7 @@
         "abyssal_tender",
         "triangle_sphinx"
       ],
-      "boss": {
-        "id": "triangle_sphinx",
-        "name": "Triangle Sphinx",
-        "hpMult": 2.2,
-        "dmgMult": 1.4
-      },
+      "boss": null,
       "lootWeights": {
         "Wood": 14,
         "Cotton": 11,
@@ -382,6 +515,57 @@
       "eliteXpMult": 2.5,
       "bossXpMult": 4,
       "cardChance": 0.66,
+      "eliteCardChance": 1,
+      "bossCardRarity": "legendary"
+    },
+    {
+      "id": "gilded",
+      "name": "Gilded Straits",
+      "desc": "Fortune's own waterway. Rich wrecks, sharper fangs.",
+      "minLevel": 16,
+      "enemyHp": 124,
+      "enemyDmg": 21,
+      "voyageLength": 3,
+      "encounterWeights": {
+        "monster": 0.58,
+        "elite": 0.26,
+        "cache": 0.16
+      },
+      "monsterPool": [
+        "abyssal_tender",
+        "siren_barge",
+        "triangle_sphinx"
+      ],
+      "elitePool": [
+        "abyssal_tyrant",
+        "abyssal_tender"
+      ],
+      "boss": null,
+      "lootWeights": {
+        "Wood": 10,
+        "Cotton": 10,
+        "Iron": 18,
+        "GoldNugget": 17,
+        "Rum": 11,
+        "CannonPart": 12,
+        "MapFragment": 13,
+        "Marks": 19,
+        "Gold": 12
+      },
+      "lootMin": 4,
+      "lootMax": 8,
+      "marks": [
+        66,
+        128
+      ],
+      "gold": [
+        5,
+        18
+      ],
+      "xpBase": 44,
+      "eliteXpMult": 2.5,
+      "bossXpMult": 4,
+      "cardChance": 0.64,
       "eliteCardChance": 1,
       "bossCardRarity": "legendary"
     }
@@ -548,7 +732,7 @@
     {
       "id": "sloop",
       "name": "Sloop",
-      "level": 3,
+      "level": 4,
       "hull": 50,
       "cannons": 2,
       "slots": 3,
@@ -560,51 +744,34 @@
       }
     },
     {
-      "id": "brig",
-      "name": "Brig",
-      "level": 8,
-      "hull": 75,
+      "id": "frigate",
+      "name": "Frigate",
+      "level": 10,
+      "hull": 78,
       "cannons": 3,
       "slots": 4,
       "cost": {
-        "Wood": 30,
-        "Cotton": 16,
-        "Iron": 12,
-        "GoldNugget": 2,
-        "Marks": 400
+        "Wood": 32,
+        "Cotton": 18,
+        "Iron": 14,
+        "GoldNugget": 3,
+        "Marks": 500
       }
     },
     {
       "id": "galleon",
       "name": "Galleon",
-      "level": 14,
-      "hull": 105,
+      "level": 16,
+      "hull": 110,
       "cannons": 4,
       "slots": 5,
       "cost": {
-        "Wood": 50,
-        "Cotton": 26,
-        "Iron": 22,
-        "GoldNugget": 5,
-        "CannonPart": 4,
-        "Marks": 800
-      }
-    },
-    {
-      "id": "dreadnought",
-      "name": "Dreadnought",
-      "level": 20,
-      "hull": 145,
-      "cannons": 5,
-      "slots": 6,
-      "cost": {
-        "Wood": 75,
-        "Cotton": 40,
-        "Iron": 35,
-        "GoldNugget": 8,
-        "CannonPart": 6,
-        "MapFragment": 5,
-        "Marks": 1500
+        "Wood": 55,
+        "Cotton": 30,
+        "Iron": 26,
+        "GoldNugget": 6,
+        "CannonPart": 5,
+        "Marks": 1000
       }
     }
   ],
@@ -816,8 +983,8 @@
   },
   "captains": [
     {
-      "id": "morgaine",
-      "name": "Captain Morgaine",
+      "id": "ladylara",
+      "name": "Lady Lara",
       "title": "The Evenhanded",
       "starter": true,
       "unlock": null,
@@ -828,7 +995,7 @@
         "kind": "draw",
         "value": 1
       },
-      "icon": "⚓",
+      "icon": "⚜",
       "pool": [
         "amplify_affinity",
         "ap01",
@@ -836,12 +1003,7 @@
         "ap03",
         "ap04",
         "barbed_shield",
-        "basic_attack_plan",
-        "basic_relief",
         "briny_relief",
-        "broadside",
-        "cannon_blast",
-        "careful_aim",
         "careful_planning",
         "carronade",
         "critical_target",
@@ -849,7 +1011,7 @@
         "defensive_strike",
         "dejavu",
         "do_it_again",
-        "evasive_maneuvers",
+        "double_shot",
         "expose_weakness",
         "extra_power",
         "fast_hands",
@@ -872,12 +1034,11 @@
         "leeching_rain",
         "long_9s",
         "mariner_s_mend",
-        "musket_shot",
         "new_plan",
         "overwatch",
-        "patch_work",
         "phoenix_armor",
         "quick_draw",
+        "refill_cannon",
         "rope_a_dope",
         "scatter_shot",
         "shell_of_defense",
@@ -890,8 +1051,8 @@
       ]
     },
     {
-      "id": "bones",
-      "name": "Salty Bones",
+      "id": "captainbanshee",
+      "name": "Captain Banshee",
       "title": "The Undying Gunner",
       "starter": false,
       "unlock": {
@@ -905,7 +1066,7 @@
         "kind": "atkBonus",
         "value": 1
       },
-      "icon": "☠",
+      "icon": "💀",
       "pool": [
         "amplify_affinity",
         "ap01",
@@ -958,22 +1119,22 @@
       ]
     },
     {
-      "id": "siren",
-      "name": "Siren",
-      "title": "The Tidecaller",
+      "id": "resourcetrader",
+      "name": "The Resource Trader",
+      "title": "Barter of the Isles",
       "starter": false,
       "unlock": {
         "level": 12,
         "resourcesCollected": 200
       },
-      "focus": "Outlast every storm",
+      "focus": "Profit from every storm",
       "ability": {
-        "name": "Mermaid's Blessing",
-        "desc": "Heal 3 HP at the start of each of your turns.",
-        "kind": "healPerTurn",
-        "value": 3
+        "name": "Fair Barter",
+        "desc": "+25% Marks from every victory.",
+        "kind": "marksBonus",
+        "value": 0.25
       },
-      "icon": "🧜",
+      "icon": "💰",
       "pool": [
         "amplify_affinity",
         "ap01",
@@ -981,12 +1142,12 @@
         "ap03",
         "ap04",
         "barbed_shield",
-        "barnacle_barrier",
         "briny_relief",
         "careful_planning",
         "commanding_stance",
         "critical_target",
         "cross_counter",
+        "defensive_strike",
         "dejavu",
         "do_it_again",
         "expose_weakness",
@@ -1024,8 +1185,8 @@
       ]
     },
     {
-      "id": "ironbeard",
-      "name": "Ironbeard",
+      "id": "rustbeard",
+      "name": "Rustbeard",
       "title": "The Press Gang",
       "starter": false,
       "unlock": {
@@ -1084,8 +1245,8 @@
       ]
     },
     {
-      "id": "oz",
-      "name": "Mapmaker Oz",
+      "id": "captainhightide",
+      "name": "Captain Hightide",
       "title": "The Chartwright",
       "starter": false,
       "unlock": {
@@ -1100,7 +1261,7 @@
         "kind": "drawAndLuck",
         "value": 2
       },
-      "icon": "🗺",
+      "icon": "🧭",
       "pool": [
         "act_with_haste",
         "advenced_attack_plan",
@@ -1153,8 +1314,8 @@
       ]
     },
     {
-      "id": "cetus",
-      "name": "Cetus",
+      "id": "royalnavyadmiral",
+      "name": "Royal Navy Admiral",
       "title": "The Dread Captain",
       "starter": false,
       "unlock": {
@@ -1169,7 +1330,7 @@
         "kind": "enemyDmgReduction",
         "value": 0.1
       },
-      "icon": "🐙",
+      "icon": "⚓",
       "pool": [
         "amplify_affinity",
         "ap01",
@@ -1220,6 +1381,140 @@
         "time_rewritten",
         "total_relief",
         "vampiric_rain",
+        "wheretheygo_06"
+      ]
+    },
+    {
+      "id": "commodore",
+      "name": "Commodore Chompington",
+      "title": "The Coral Officer",
+      "starter": false,
+      "unlock": {
+        "level": 13,
+        "eliteKills": 6,
+        "MapFragment": 4
+      },
+      "focus": "Discipline and defense",
+      "ability": {
+        "name": "Cold Cannonade",
+        "desc": "Gain 2 shield at the start of each of your turns.",
+        "kind": "shieldPerTurn",
+        "value": 2
+      },
+      "icon": "🛡",
+      "pool": [
+        "amplify_affinity",
+        "ap01",
+        "ap02",
+        "ap03",
+        "ap04",
+        "barbed_shield",
+        "barnacle_barrier",
+        "briny_relief",
+        "careful_planning",
+        "critical_target",
+        "cross_counter",
+        "defensive_strike",
+        "dejavu",
+        "do_it_again",
+        "expose_weakness",
+        "extra_power",
+        "fast_hands",
+        "find_inspired_attack",
+        "fix_it",
+        "focus_target",
+        "fortitude",
+        "great_relief",
+        "hardened_shield",
+        "hasty_plan",
+        "helm_splitter",
+        "hit_the_dry_powder",
+        "hit_the_weakest_point",
+        "hull_piercer",
+        "imposing_order",
+        "improvised_plan",
+        "inspiration",
+        "inspired_attack",
+        "iron_guard",
+        "last_ditch",
+        "leeching_rain",
+        "light_cover",
+        "mariner_s_mend",
+        "new_plan",
+        "overwatch",
+        "phoenix_armor",
+        "quick_draw",
+        "rope_a_dope",
+        "scatter_shot",
+        "thorny_guard",
+        "total_relief",
+        "wheretheygo_06"
+      ]
+    },
+    {
+      "id": "admiralironsides",
+      "name": "Admiral Ironsides",
+      "title": "The Old Guard",
+      "starter": false,
+      "unlock": {
+        "level": 18,
+        "endlessWave": 35,
+        "eliteKills": 12
+      },
+      "focus": "Steady as the tide",
+      "ability": {
+        "name": "Iron Discipline",
+        "desc": "Heal 2 at the start of each of your turns.",
+        "kind": "healPerTurn",
+        "value": 2
+      },
+      "icon": "🎖",
+      "pool": [
+        "advenced_attack_plan",
+        "amplify_affinity",
+        "another_round",
+        "ap01",
+        "ap02",
+        "ap03",
+        "ap04",
+        "barbed_shield",
+        "briny_relief",
+        "careful_planning",
+        "commanding_stance",
+        "critical_target",
+        "dejavu",
+        "distress_call",
+        "do_it_again",
+        "expose_weakness",
+        "extra_power",
+        "fast_hands",
+        "find_inspired_attack",
+        "fix_it",
+        "focus_target",
+        "hardened_shield",
+        "hasty_plan",
+        "helm_splitter",
+        "hit_the_dry_powder",
+        "hit_the_weakest_point",
+        "imposing_order",
+        "improvised_plan",
+        "inspiration",
+        "inspired_attack",
+        "iron_guard",
+        "last_ditch",
+        "leeching_rain",
+        "mariner_s_mend",
+        "masterful_plan",
+        "new_plan",
+        "overwatch",
+        "phoenix_armor",
+        "player2advantage",
+        "quick_draw",
+        "rope_a_dope",
+        "scatter_shot",
+        "thorny_guard",
+        "thoughtful_planning",
+        "total_relief",
         "wheretheygo_06"
       ]
     }

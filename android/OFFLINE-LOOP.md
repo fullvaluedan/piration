@@ -18,15 +18,18 @@ Level up -> new zones, rarities, ships -> captain unlock missions
 Endless mode -> waves + high score -> deeper unlocks
 ```
 
-### 1. No energy
-- There is no energy system. The cost of sailing is **risk**: monsters damage
-  your hull, defeats cost repair resources, and tougher zones require better
-  ships and decks. Play as much as you want.
+### 1. Energy
+- Config flag `energy.unlimited` (true in test builds, UI shows `∞`).
+- The real economy ships dormant behind the flag: cap 100, regen 1 per
+  5 minutes, gathering costs 3, open-sea ambushes cost 8. Flipping the flag
+  produces the full drain-and-regen economy.
 
 ### 2. Voyages -> encounters -> loot
-- 6 zones, level-gated. Each voyage = 3 random encounters plus an optional boss.
-- The Voyage tab is a roamable world map: animated sea, voxel-art islands,
-  and a ship that sails to the island you chart.
+- 8 zones (plus the Parrot's Perch home island), level-gated. Each voyage =
+  3 random encounters; four of the zones hold a world boss.
+- The game opens on a live 16:9 3D world: a turquoise sea, voxel islands,
+  and a ship you sail with the left joystick. Walk ashore, swim, gather, and
+  get ambushed in open water — combat drops into the same world.
 - Encounters: **monster** (fight), **elite** (tough, big loot), **cache** (free
   resources), **boss** (guaranteed epic/legendary card).
 - Per encounter: Fight, Bribe (skip for Marks), or Flee (hull damage).
@@ -38,20 +41,22 @@ Endless mode -> waves + high score -> deeper unlocks
   MIT-licensed game archive play behind menus, battles, and actions.
 
 ### 3. Port
-- **Shipwright:** Skiff -> Sloop -> Brig -> Galleon -> Dreadnought
-  (level + materials).
+- **Shipwright:** Skiff -> Sloop -> Frigate -> Galleon (level + materials).
 - **Repair:** defeats and flees damage hull durability; repair costs resources.
 - **Workshop:** Cannon Part, Map Kit, Rum.
 - **Recruit:** crewmates (+2% damage, +4 HP each, cap +10%).
 - **Enhance:** spend Marks + a duplicate to +1 damage/shield (+2 heal), max +3.
 
 ### 4. Captains
-- 6 captains, each with a unique card pool and a passive ability.
+- 8 lore captains, each with an elemental affinity (rock-paper-scissors
+  combat modifiers), a unique card pool, and a passive ability.
 - Unlock missions start after level 10 and get progressively harder:
-  Salty Bones (Lv10 + 20 Endless kills), Siren (Lv12 + 200 resources),
-  Ironbeard (Lv15 + 10 elite kills + 5 Cannon Parts), Mapmaker Oz
-  (Lv16 + Endless wave 25 + 10 Map Fragments), Cetus (Lv20 + wave 40 +
-  500 total kills).
+  Captain Banshee (Lv10 + 20 Endless kills), The Resource Trader
+  (Lv12 + 200 resources), Commodore Chompington (Lv13 + 6 elite kills +
+  4 Map Fragments), Rustbeard (Lv15 + 10 elite kills + 5 Cannon Parts),
+  Captain Hightide (Lv16 + Endless wave 25 + 10 Map Fragments),
+  Admiral Ironsides (Lv18 + Endless wave 35 + 12 elite kills), Royal Navy
+  Admiral (Lv20 + wave 40 + 500 total kills).
 
 ### 5. Endless mode
 - Waves of 1-3 monsters, scaling forever. Free 25% heal between waves, paid
@@ -60,12 +65,12 @@ Endless mode -> waves + high score -> deeper unlocks
   path to the final captain unlocks.
 
 ### 6. Maxing out (~20 hours)
-- Level cap 30 (total ~49,300 XP), Dreadnought, all six captains, and a fully
-  enhanced deck. Verified by `scripts/sim-progression.mjs`.
+- Level cap 20 (total ~39,700 XP), Galleon, all eight captains, and a fully
+  enhanced deck. Verified in the 18-22h band by `scripts/sim-progression.mjs`.
 
 ## Where to play
 ```
 cd android && npm run serve   ->   http://localhost:5173
 ```
 Or open `android/www/index.html` in a browser. Hard refresh if an old service
-worker sticks (`sw.js` is v4).
+worker sticks (`sw.js` is v6).

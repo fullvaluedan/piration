@@ -18,6 +18,7 @@ const MIME = {
   ".png": "image/png",
   ".webp": "image/webp",
   ".mp3": "audio/mpeg",
+  ".glb": "model/gltf-binary",
   ".webmanifest": "application/manifest+json; charset=utf-8",
   ".svg": "image/svg+xml",
 };

@@ -1,4 +1,5 @@
 import * as core from "./core.js";
+import { PirationWorld } from "./world3d.js";
 
 const STORAGE_KEY = "piration_v3";
 
@@ -13,6 +14,8 @@ let ASSETS = null; // assets/manifest.json
 let musicEl = null;
 let musicKind = null;
 let sfxCache = {};
+let world = null;
+let panelOpen = false;
 
 const $ = (sel) => document.querySelector(sel);
 const content = () => $("#content");
@@ -227,7 +230,8 @@ function monsterArt(encounter) {
 
 function xpPct() {
   const c = state.character;
-  if (c.level >= core.MAX_LEVEL) return 100;
+  const cap = CARDS.game?.balance?.maxLevel || core.MAX_LEVEL;
+  if (c.level >= cap) return 100;
   return Math.min(100, Math.round((c.xp / Math.max(1, c.xpToNext)) * 100));
 }
 
@@ -257,6 +261,10 @@ function refreshStats() {
   const ship = core.shipStatus(state, CARDS.game);
   const uniq = new Set(state.collection || []).size;
   const inv = state.inventory;
+  core.regenEnergy(state, CARDS.game);
+  const energyLabel = CARDS.game.balance.energy.unlimited
+    ? "⚡ ∞"
+    : `⚡ ${state.energy}/${state.energyMax}`;
   const warn =
     ship.pct < 60
       ? `<div class="warn">⚓ Hull at ${ship.pct}% — repair at the Shipyard</div>`
@@ -267,6 +275,7 @@ function refreshStats() {
       <span>${xpPct()}% XP</span>
     </div>
     <div class="statline muted">
+      <span>${energyLabel}</span>
       <span>Marks ${inv.Marks} · Gold ${inv.Gold}</span>
       <span>${esc(ship.ship.name)} ${ship.pct}%</span>
       <span>${uniq} cards</span>
@@ -499,6 +508,7 @@ function renderVoyageResult(result) {
     core.returnToPort(state);
     uiPending = null;
     sfx("tap");
+    if (world) closeGamePanel();
     after();
   });
 }
@@ -544,7 +554,7 @@ function enemyIntentText(combat) {
   if (e.intent === "brace") return `Brace (+${3 + Math.floor(combat.turn / 4)} shield)`;
   if (e.intent === "charge") return "Charge (next hit ×1.6)";
   let dmg = e.dmg;
-  if (state.captainId === "cetus") dmg = Math.round(dmg * 0.9);
+  if (state.captainId === "royalnavyadmiral") dmg = Math.round(dmg * 0.9);
   if (e.charged) dmg = Math.round(dmg * 1.6);
   return `Attack (~${dmg})`;
 }
@@ -582,8 +592,8 @@ function renderCombat(back) {
     ? `<div class="muted">Wave ${c.endless?.wave || ""} · Score ${state.endless?.score || 0} · ${state.endless?.waveEnemiesLeft || 1} this wave</div>`
     : "";
   let html = `<div class="section battle">
-    <h2>${esc(c.enemy.name)}</h2>
-    <div class="muted">${c.mode === "endless" ? `Wave ${c.endless?.wave || ""}` : ""} · ${esc(c.encounter.isElite ? "Elite" : c.encounter.isBoss ? "Boss" : "Monster")}</div>
+    <h2>${esc(c.enemy.name)} <span class="pill element-pill">${esc(c.enemy.element)}</span></h2>
+    <div class="muted">${c.mode === "endless" ? `Wave ${c.endless?.wave || ""}` : ""} · ${esc(c.encounter.isElite ? "Elite" : c.encounter.isBoss ? "Boss" : "Monster")} · You sail as ${esc(core.currentCaptain(state, CARDS.game)?.element)}</div>
     <div class="battle-scene">
       ${artImg(monsterArt(c.encounter), "enemy-sprite", c.enemy.name)}
       ${artImg(ASSETS?.ships?.[state.shipId], "player-sprite", "your ship")}
@@ -702,7 +712,7 @@ function renderEndlessMenu() {
     html += `</div>`;
   }
   html += `</div>
-  <div class="section"><h2>Unlock missions</h2><p class="muted">Endless is also a mission path: kill ${CARDS.game.captains.find((c) => c.id === "bones").unlock.endlessKills} enemies to unlock Salty Bones, reach wave ${CARDS.game.captains.find((c) => c.id === "oz").unlock.endlessWave} for Mapmaker Oz…</p></div>`;
+  <div class="section"><h2>Unlock missions</h2><p class="muted">Endless is also a mission path: kill ${CARDS.game.captains.find((c) => c.id === "captainbanshee").unlock.endlessKills} enemies to unlock Captain Banshee, reach wave ${CARDS.game.captains.find((c) => c.id === "captainhightide").unlock.endlessWave} for Captain Hightide…</p></div>`;
   content().innerHTML = html;
   bindHintClose();
   bind("#startEndless", () => {
@@ -859,6 +869,7 @@ function renderShipyard() {
     b.addEventListener("click", () => {
       const r = core.craftShip(state, CARDS.game, b.dataset.ship);
       if (!r.ok) return toast(r.reason);
+      world?.setShip(r.ship.id);
       sfx("unlock");
       buzz([30, 60]);
       toast("Launched the " + r.ship.name + "!");
@@ -986,6 +997,16 @@ function renderCollection() {
     <div class="section"><h2>About</h2>
       <p class="muted">Piration v3 · offline-only · progress saved on device. Inspired by open-sourced Pirate Nation materials (CC0/MIT). Not affiliated with Proof of Play.</p>
     </div>
+    <div class="section"><h2>Debug</h2>
+      <p class="muted">Playtest tools — wipe, grant, and travel.</p>
+      <div class="row">
+        <button class="btn mini ghost" id="debugXp">+5000 XP</button>
+        <button class="btn mini ghost" id="debugRes">+50 resources</button>
+        <button class="btn mini ghost" id="debugCaps">Unlock captains</button>
+        <button class="btn mini ghost" id="debugJumpHub">Sail home</button>
+        <button class="btn mini ghost" id="debugJumpAbyss">Sail to Abyss</button>
+      </div>
+    </div>
     <div class="section"><h2>Ledger</h2>
     <p class="muted">Voyages ${state.stats.voyages} · Fights ${state.stats.fights} · W/L ${state.stats.wins}/${state.stats.losses} · Kills ${state.stats.kills} (elites ${state.stats.eliteKills}, bosses ${state.stats.bossKills})</p>
     <p class="muted">Endless runs ${state.stats.endlessRuns} · best wave ${state.stats.endlessBestWave} · best score ${state.stats.endlessBestScore}</p>
@@ -1051,6 +1072,39 @@ function renderCollection() {
       },
     });
   });
+  bind("#debugXp", () => {
+    const r = core.addXp(state, CARDS.game, 5000);
+    sfx("level");
+    toast("+5000 XP" + (r.levels ? ` · ${r.levels} levels!` : ""));
+    after();
+  });
+  bind("#debugRes", () => {
+    for (const k of ["Wood", "Cotton", "Iron", "GoldNugget", "CannonPart", "MapFragment", "Rum"]) {
+      state.inventory[k] = (state.inventory[k] || 0) + 50;
+    }
+    sfx("coin");
+    toast("+50 of every resource");
+    after();
+  });
+  bind("#debugCaps", () => {
+    for (const cap of CARDS.game.captains) {
+      if (!state.unlockedCaptains.includes(cap.id)) {
+        state.unlockedCaptains.push(cap.id);
+        core.unlockCaptain(state, CARDS, CARDS.game, cap.id);
+      }
+    }
+    sfx("unlock");
+    toast("All captains unlocked");
+    after();
+  });
+  bind("#debugJumpHub", () => {
+    world?.jumpTo("hub");
+    closeGamePanel();
+  });
+  bind("#debugJumpAbyss", () => {
+    world?.jumpTo("abyss");
+    closeGamePanel();
+  });
 }
 
 // ---------- help ----------
@@ -1063,7 +1117,7 @@ function renderHelp() {
       <li><strong>Shipyard</strong> — craft ships (more hull/AP/berths), repair after defeats, craft parts, recruit crew.</li>
       <li><strong>Captains</strong> — reach level 10, then complete monster/resource missions to unlock captains with unique card pools and abilities.</li>
       <li><strong>Endless</strong> — survive waves for score, XP, and unlock missions.</li>
-      <li><strong>Maxing out</strong> — level 30, the Dreadnought, all six captains, and enhanced cards take about 20 hours.</li>
+      <li><strong>Maxing out</strong> — level 20, the Galleon, all eight captains, and enhanced cards take about 20 hours.</li>
     </ol>
     <button class="btn" id="helpOk">Aye aye!</button></div>`;
   content().innerHTML = html;
@@ -1110,6 +1164,8 @@ function bindTabs() {
   bind("#modal", (e) => {
     if (e.target?.id === "modal") closeModal();
   });
+  bind("#menuBtn", () => openGamePanel("menu"));
+  bind("#closePanelBtn", () => closeGamePanel());
 }
 
 function setupBackButton() {
@@ -1117,6 +1173,7 @@ function setupBackButton() {
   if (!App?.addListener) return;
   App.addListener("backButton", () => {
     if (modalActive) return closeModal();
+    if (panelOpen) return closeGamePanel();
     if (state.combat) {
       confirmModal({
         title: "Retreat?",
@@ -1150,6 +1207,99 @@ function setupBackButton() {
   });
 }
 
+// ---------- 3D world integration ----------
+
+function openGamePanel(which) {
+  panelOpen = true;
+  const app = $("#app");
+  app.style.display = "flex";
+  if (which && which !== "menu") tab = which;
+  render();
+}
+
+function closeGamePanel() {
+  panelOpen = false;
+  $("#app").style.display = "none";
+  render();
+}
+
+function updateWorldHUD(h) {
+  const modeLabel = { sail: "Sailing", walk: "Walking", swim: "Swimming" }[h.mode] || "Sailing";
+  const modeEl = $("#hudMode");
+  if (modeEl) modeEl.textContent = modeLabel;
+  const zoneEl = $("#hudZone");
+  if (zoneEl) zoneEl.textContent = h.zone ? "Near " + h.zone : "";
+  const speedEl = $("#hudSpeed");
+  if (speedEl) speedEl.textContent = h.mode === "sail" && h.speed ? h.speed + " kn" : "";
+  core.regenEnergy(state, CARDS.game);
+  const energyEl = $("#hudEnergy");
+  if (energyEl) {
+    energyEl.textContent = CARDS.game.balance.energy.unlimited
+      ? "⚡ ∞"
+      : "⚡ " + state.energy + "/" + state.energyMax;
+  }
+  const marksEl = $("#hudMarks");
+  if (marksEl) marksEl.textContent = "⛁ " + state.inventory.Marks;
+  const goldEl = $("#hudGold");
+  if (goldEl) goldEl.textContent = "¤ " + state.inventory.Gold;
+  const resEl = $("#hudRes");
+  if (resEl) resEl.textContent = "🪵 " + state.inventory.Wood;
+  const actionBtn = $("#worldAction");
+  if (actionBtn) {
+    actionBtn.textContent = h.action?.enabled ? h.action.label : "—";
+    actionBtn.disabled = !h.action?.enabled;
+  }
+}
+
+function startWorldAmbush(mobId) {
+  const cost = CARDS.game.balance.energy.combatCost;
+  const sp = core.spendEnergy(state, CARDS.game, cost);
+  if (!sp.ok) return toast(sp.reason + " — the thing slips back beneath the waves.");
+  if (state.combat || state.voyage) return toast("You're already engaged!");
+  const zoneMap = { guppy_raider: "shallows", reef_horror: "reefs", abyssal_tender: "abyss" };
+  const zoneId = zoneMap[mobId] || "opensea";
+  state.voyage = {
+    zoneId,
+    encounters: [{ type: "monster", monsterId: mobId, zoneId, isElite: false, isBoss: false }],
+    index: 0,
+    bossRemaining: false,
+    playerHp: core.playerMaxHp(state, CARDS.game),
+    results: [],
+    startedAt: Date.now(),
+  };
+  const r = core.startFight(state, CARDS, CARDS.game);
+  if (!r.ok) {
+    state.voyage = null;
+    return toast(r.reason);
+  }
+  sfx("start");
+  openGamePanel("voyage");
+}
+
+function initWorld() {
+  const canvas = document.getElementById("worldCanvas");
+  if (!canvas) return;
+  world = new PirationWorld(canvas, {
+    getShipId: () => state.shipId,
+    getGatherCost: () => CARDS.game.balance.energy.gatherCost,
+    getEnergy: () => {
+      core.regenEnergy(state, CARDS.game);
+      return state.energy;
+    },
+    spendEnergy: (n) => core.spendEnergy(state, CARDS.game, n),
+    grantResource: (k, v) => {
+      state.inventory[k] = (state.inventory[k] || 0) + v;
+      save();
+    },
+    toast: (m) => toast(m),
+    sfx: (k) => sfx(k),
+    openPanel: (which) => openGamePanel(which),
+    onHUD: (h) => updateWorldHUD(h),
+    startAmbush: (mobId) => startWorldAmbush(mobId),
+  });
+  world.init().catch((e) => console.error("world init failed", e));
+}
+
 async function boot() {
   const [cardsRes, gameRes, assetsRes] = await Promise.all([
     fetch("./data/cards.json"),
@@ -1170,6 +1320,13 @@ async function boot() {
   document.addEventListener("pointerdown", unlockAudio, { once: true });
   document.addEventListener("keydown", unlockAudio, { once: true });
   render();
+  if (!state.sawHelp) openGamePanel();
+  initWorld();
+  window.addEventListener("pagehide", save);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") save();
+  });
+  window.Capacitor?.Plugins?.App?.addListener?.("pause", save);
   setInterval(() => {
     // keep header current without stealing focus from combat
     refreshStats();

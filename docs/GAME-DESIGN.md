@@ -52,18 +52,22 @@ encounters you may continue (10% free heal) or return to port.
 - Win: XP + loot + card drop. Lose: small XP, hull durability damage
   (repair costs resources — the main sink), voyage ends.
 
-## Captains (unlock after level 10, progressively harder)
+## Captains (8 lore captains, unlock after level 10, progressively harder)
 
-| Captain | Unlock mission | Play style |
-|---------|----------------|------------|
-| Morgaine (starter) | — | Balanced, draws 6 cards/turn |
-| Salty Bones | Lv 10 + kill 20 enemies in Endless | Glass cannon: +1 attack damage |
-| Siren | Lv 12 + collect 200 resources | Sustain: heal 3 each turn |
-| Ironbeard | Lv 15 + win 10 elite fights + own 5 Cannon Parts | Burst: +1 AP per turn |
-| Mapmaker Oz | Lv 16 + reach wave 25 in Endless + 10 Map Fragments | Engine: bonus draws, better card luck |
-| Cetus | Lv 20 + reach wave 40 + 500 total kills | Dread: enemies deal 10% less damage |
+| Captain | Element | Unlock mission |
+|---------|---------|----------------|
+| Lady Lara (starter) | Light | — |
+| Captain Banshee | Dark | Lv 10 + kill 20 in Endless |
+| The Resource Trader | Earth | Lv 12 + collect 200 resources |
+| Commodore Chompington | Water | Lv 13 + 6 elite kills + 4 Map Fragments |
+| Rustbeard | Fire | Lv 15 + 10 elite kills + 5 Cannon Parts |
+| Captain Hightide | Air | Lv 16 + Endless wave 25 + 10 Map Fragments |
+| Admiral Ironsides | Ice | Lv 18 + Endless wave 35 + 12 elite kills |
+| Royal Navy Admiral | Lightning | Lv 20 + Endless wave 40 + 500 kills |
 
-Each captain's card pool is a different mix of the 151-card archive pool
+Combat uses elemental rock-paper-scissors modifiers (1.5x strong, 0.75x weak)
+defined in the `elements` table in `www/data/game.json`. Each captain's card
+pool is a different mix of the 151-card archive pool
 (Attack / Defend / Skill / Resource), generated deterministically in
 `android/scripts/build-game-data.mjs` and written into `www/data/game.json`.
 
@@ -82,10 +86,9 @@ by spending Marks plus duplicate copies. This is the endgame resource sink.
 | Ship | Level | Hull | Cannons | Berths |
 |------|-------|------|---------|--------|
 | Skiff | 1 | 30 | 1 | 2 |
-| Sloop | 3 | 50 | 2 | 3 |
-| Brig | 8 | 75 | 3 | 4 |
-| Galleon | 14 | 105 | 4 | 5 |
-| Dreadnought | 20 | 145 | 5 | 6 |
+| Sloop | 4 | 50 | 2 | 3 |
+| Frigate | 10 | 78 | 3 | 4 |
+| Galleon | 16 | 110 | 4 | 5 |
 
 Costs mix resources + Marks. Crewmates (recruited with Marks + Rum) each give
 +2% card damage and +4 max HP (cap +10%).
@@ -101,11 +104,11 @@ Costs mix resources + Marks. Crewmates (recruited with Marks + Rum) each give
 
 ## 20-hour max curve
 
-- Character level cap: **30**.
-- XP per level: `floor(80 × level^1.12)`; total to max ≈ **49,300 XP**.
-- The progression simulator (real game logic + scripted bot) reaches Lv30 in
-  ~18h of pure voyage time; a real player lands around 20h with losses,
-  browsing, and build experiments. Verified by `android/scripts/sim-progression.mjs`.
+- Character level cap: **20** (spec: 18-22h to max).
+- XP per level: `floor(155 × level^1.12)`; total to max ≈ **39,700 XP**.
+- The progression simulator (real game logic + scripted bot) reaches Lv20 in
+  ~19h of voyage time — inside the required 18-22h band, enforced by
+  `android/scripts/sim-progression.mjs`.
 - Resource and card sinks are tuned so the last ship, last captain, and full
   enhancement track finish inside the same window.
 
